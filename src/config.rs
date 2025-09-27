@@ -9,7 +9,7 @@ use json::{object, JsonValue};
 
 use crate::{
     color_palette::{ColorMapElement, DEFAULT_COLOR_MAP},
-    dithering::{error_diffusion::ErrorDiffusionType, threshold::ThresholdType, DitheringType},
+    dithering::{DitheringType, ErrorDiffusionType, ThresholdType},
     pixel_util::RGB,
 };
 
