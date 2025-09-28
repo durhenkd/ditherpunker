@@ -1,28 +1,39 @@
-use crate::{color_palette::ColorMapElement, pixel_util::RGB};
+use crate::{color_palette::ColorMapElement, dithering::{error_diffusion::ErrorDiffusionType, threshold::ThresholdType}, pixel_util::RGB};
 
 mod error_diffusion;
 mod threshold;
 
-pub use error_diffusion::ErrorDiffusionType;
-pub use threshold::ThresholdType;
-
 #[derive(Debug, Clone, Copy)]
 pub enum DitheringType {
-    Ordered(ThresholdType),
-    ErrorDifusion(ErrorDiffusionType),
+    Rand,
+    Bayer0,
+    Bayer1,
+    Bayer2,
+    Bayer3,
+    BlueNoise,
+    FloydSteinberg,
+    JarvisJudiceNinke,
+    Atkinson,
 }
 
-pub fn dither(
-    data: &mut Vec<RGB>,
-    width: u32,
-    _height: u32,
-    ditheringt: DitheringType,
-    color_map: &Vec<ColorMapElement>,
-) {
-    match ditheringt {
-        DitheringType::Ordered(ttype) => {
-            threshold::dither_ordered(data, width, _height, ttype, color_map)
-        }
-        DitheringType::ErrorDifusion(_) => panic!("This is not implemented yet"),
-    };
+impl DitheringType {
+    pub fn dither(
+        &self,
+        data: &mut Vec<RGB>,
+        width: u32,
+        height: u32,
+        color_map: &Vec<ColorMapElement>,
+    ) {
+        match self {
+            Self::Rand => ThresholdType::Rand.dither(data, width, height, color_map),
+            Self::Bayer0 => ThresholdType::Bayer0.dither(data, width, height, color_map),
+            Self::Bayer1 => ThresholdType::Bayer1.dither(data, width, height, color_map),
+            Self::Bayer2 => ThresholdType::Bayer2.dither(data, width, height, color_map),
+            Self::Bayer3 => ThresholdType::Bayer3.dither(data, width, height, color_map),
+            Self::BlueNoise => ThresholdType::BlueNoise.dither(data, width, height, color_map),
+            Self::FloydSteinberg => ErrorDiffusionType::FloydSteinberg.dither(data, width, height, color_map),
+            Self::JarvisJudiceNinke => ErrorDiffusionType::JarvisJudiceNinke.dither(data, width, height, color_map),
+            Self::Atkinson => ErrorDiffusionType::Atkinson.dither(data, width, height, color_map),
+        };
+    }
 }
