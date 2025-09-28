@@ -41,7 +41,7 @@ The program needs a config file to know how to edit your images:
       "offset": 0.50,
       "magnitude": 0.5
     },
-    "color": "f0f0f0" // shorthand for when not using offset or magnitude
+    "f0f0f0" // shorthand for when not using offset or magnitude
   ],
   "output_scale": 4 // scale the image before writing it (done to preserve the pixel effect)
 }
