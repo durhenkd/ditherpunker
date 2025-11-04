@@ -30,7 +30,7 @@ impl ThresholdType {
         let mut index = 0;
         while index < data.len() {
             data[index] = self.dither_helper(
-                data[index].r,
+                data[index].grayscale(),
                 color_map,
                 index % width as usize,
                 index / width as usize,

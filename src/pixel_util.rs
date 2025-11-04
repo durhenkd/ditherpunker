@@ -45,7 +45,7 @@ impl RGB {
         format!("{:X}{:X}{:X}", r, g, b)
     }
 
-    fn grayscale(&self) -> f64 {
+    pub fn grayscale(&self) -> f64 {
         0.299 * self.r + 0.587 * self.g + 0.114 * self.b
     }
 
