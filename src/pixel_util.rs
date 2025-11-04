@@ -60,9 +60,9 @@ impl RGB {
     }
 
     pub fn add_luminosity(&mut self, amount: f64) {
-        self.r = (self.r + amount).clamp(0.0, 1.0);
-        self.g = (self.g + amount).clamp(0.0, 1.0);
-        self.b = (self.b + amount).clamp(0.0, 1.0);
+        self.r = self.r + amount;
+        self.g = self.g + amount;
+        self.b = self.b + amount;
     }
 
     pub fn set_value(&mut self, value: f64) {
