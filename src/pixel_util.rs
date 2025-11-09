@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::{fmt::{Debug, Display}, ops::{Add, Sub}};
 
 // values are defined in a range [0.0, 1.0]
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -8,6 +8,34 @@ pub struct RGB {
     pub b: f64,
     pub a: f64,
 }
+
+impl Add for RGB {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        RGB {
+            r: self.r + rhs.r,
+            g: self.g + rhs.g,
+            b: self.b + rhs.b,
+            a: self.a.max(rhs.a),
+        }
+    }
+}
+
+impl Sub for RGB {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+         RGB {
+            r: self.r - rhs.r,
+            g: self.g - rhs.g,
+            b: self.b - rhs.b,
+            a: self.a.min(rhs.a),
+        }
+    }
+}
+
+// TODO: implement multiplication to use 3D distance in error diffusion algorithm
 
 impl RGB {
     pub fn from_u8(r: u8, g: u8, b: u8, a: u8) -> RGB {

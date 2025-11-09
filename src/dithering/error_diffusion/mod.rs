@@ -120,7 +120,7 @@ fn discrete_and_calculate_error(pixel: &mut RGB, color_map: &Vec<ColorMapElement
     let mut index_map = 0;
     while index_map < color_map.len() {
         if pixel.r <= color_map[index_map].scale {
-            let error = pixel.grayscale() - color_map[index_map].color.grayscale();
+            let error = pixel.grayscale() - color_map[index_map].scale;
             (*pixel) = color_map[index_map].color;
             return error;
         }
@@ -128,9 +128,9 @@ fn discrete_and_calculate_error(pixel: &mut RGB, color_map: &Vec<ColorMapElement
         index_map += 1;
     }
 
-    let color = color_map.last().unwrap().color;
-    let error = pixel.grayscale() - color.grayscale() ;
-    (*pixel) = color;
+    let last_element = color_map.last().unwrap();
+    let error = pixel.grayscale() - last_element.scale ;
+    (*pixel) = last_element.color;
     return error;
 }
 
