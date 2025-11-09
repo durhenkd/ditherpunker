@@ -99,13 +99,13 @@ impl ErrorDiffusionType {
 }
 
 fn normalize_color_map(color_map: &mut Vec<ColorMapElement>) {
-    let sum = color_map
+    let sum = color_map[1..]
         .iter()
         .map(|x| x.scale)
         .reduce(|acc, e| acc + e)
         .unwrap_or(0.0);
     let mut rolling_sum = 0.0;
-    let mut index = 0;
+    let mut index = 1;
 
     while index < color_map.len() {
         color_map[index].scale /= sum;
@@ -114,21 +114,25 @@ fn normalize_color_map(color_map: &mut Vec<ColorMapElement>) {
 
         index += 1;
     }
+
+    color_map[0].scale = 0.0;
 }
 
 fn discrete_and_calculate_error(pixel: &mut RGB, color_map: &Vec<ColorMapElement>) -> f64 {
     let mut index_map = 0;
+    let mut min_index = 0;
+    let mut min_diff = f64::MAX;
     while index_map < color_map.len() {
-        if pixel.r <= color_map[index_map].scale {
-            let error = pixel.grayscale() - color_map[index_map].scale;
-            (*pixel) = color_map[index_map].color;
-            return error;
+        let diff = (pixel.grayscale() - color_map[index_map].scale).abs();
+        if diff < min_diff {
+            min_index = index_map;
+            min_diff = diff;
         }
 
         index_map += 1;
     }
 
-    let last_element = color_map.last().unwrap();
+    let last_element = color_map[min_index];
     let error = pixel.grayscale() - last_element.scale ;
     (*pixel) = last_element.color;
     return error;
