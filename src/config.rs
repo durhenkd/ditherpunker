@@ -9,7 +9,7 @@ use json::{object, JsonValue};
 
 use crate::{
     color_palette::{ColorMapElement, DEFAULT_COLOR_MAP},
-    dithering::{DitheringType, ErrorDiffusionType, ThresholdType},
+    dithering::DitheringType,
     pixel_util::RGB,
 };
 
@@ -51,15 +51,15 @@ impl ProcessConfig {
 
         let dithering_type: DitheringType = match json["dithering_type"].as_str() {
             Some(s) => match s {
-                "rand" => DitheringType::Ordered(ThresholdType::Rand),
-                "bayer_0" => DitheringType::Ordered(ThresholdType::Bayer0),
-                "bayer_1" => DitheringType::Ordered(ThresholdType::Bayer1),
-                "bayer_2" => DitheringType::Ordered(ThresholdType::Bayer2),
-                "bayer_3" => DitheringType::Ordered(ThresholdType::Bayer3),
-                "blue_noise" => DitheringType::Ordered(ThresholdType::BlueNoise),
-                "atkinson" => DitheringType::ErrorDifusion(ErrorDiffusionType::Atkinson),
-                "jarvis" => DitheringType::ErrorDifusion(ErrorDiffusionType::JarvisJudiceNinke),
-                "floyd" => DitheringType::ErrorDifusion(ErrorDiffusionType::FloydSteinberg),
+                "rand" => DitheringType::Rand,
+                "bayer_0" => DitheringType::Bayer0,
+                "bayer_1" => DitheringType::Bayer1,
+                "bayer_2" => DitheringType::Bayer2,
+                "bayer_3" => DitheringType::Bayer3,
+                "blue_noise" => DitheringType::BlueNoise,
+                "atkinson" => DitheringType::Atkinson,
+                "jarvis" => DitheringType::JarvisJudiceNinke,
+                "floyd" => DitheringType::FloydSteinberg,
                 _ => return ConfigError::get("Not recognized dithering_type"),
             },
             None => return ConfigError::get("Couldn't parse dithering_type"),
@@ -146,8 +146,15 @@ impl ProcessConfig {
 impl From<DitheringType> for JsonValue {
     fn from(dtype: DitheringType) -> Self {
         match dtype {
-            DitheringType::Ordered(ordered_type) => ordered_type.into(),
-            DitheringType::ErrorDifusion(diffusion_type) => diffusion_type.into(),
+            DitheringType::Rand => JsonValue::String(String::from("rand")),
+            DitheringType::Bayer0 => JsonValue::String(String::from("bayer_0")),
+            DitheringType::Bayer1 => JsonValue::String(String::from("bayer_1")),
+            DitheringType::Bayer2 => JsonValue::String(String::from("bayer_2")),
+            DitheringType::Bayer3 => JsonValue::String(String::from("bayer_3")),
+            DitheringType::BlueNoise => JsonValue::String(String::from("blue_noise")),
+            DitheringType::Atkinson => JsonValue::String(String::from("atkinson")),
+            DitheringType::JarvisJudiceNinke => JsonValue::String(String::from("jarvis")),
+            DitheringType::FloydSteinberg => JsonValue::String(String::from("floyd")),
         }
     }
 }
@@ -161,29 +168,6 @@ impl From<RGB> for JsonValue {
 impl From<ColorMapElement> for JsonValue {
     fn from(cme: ColorMapElement) -> Self {
         object! { color: cme.color, offset: cme.offset, scale: cme.scale }
-    }
-}
-
-impl From<ThresholdType> for JsonValue {
-    fn from(ttype: ThresholdType) -> Self {
-        match ttype {
-            ThresholdType::Rand => JsonValue::String(String::from("rand")),
-            ThresholdType::Bayer0 => JsonValue::String(String::from("bayer_0")),
-            ThresholdType::Bayer1 => JsonValue::String(String::from("bayer_1")),
-            ThresholdType::Bayer2 => JsonValue::String(String::from("bayer_2")),
-            ThresholdType::Bayer3 => JsonValue::String(String::from("bayer_3")),
-            ThresholdType::BlueNoise => JsonValue::String(String::from("blue_noise")),
-        }
-    }
-}
-
-impl From<ErrorDiffusionType> for JsonValue {
-    fn from(ttype: ErrorDiffusionType) -> Self {
-        match ttype {
-            ErrorDiffusionType::Atkinson => JsonValue::String(String::from("atkinson")),
-            ErrorDiffusionType::JarvisJudiceNinke => JsonValue::String(String::from("jarvis")),
-            ErrorDiffusionType::FloydSteinberg => JsonValue::String(String::from("floyd")),
-        }
     }
 }
 

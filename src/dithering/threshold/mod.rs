@@ -1,11 +1,9 @@
-mod bayer;
-mod blue_noise;
+mod matrices;
 
 use crate::{
     color_palette::ColorMapElement,
     dithering::threshold::{
-        bayer::{BAYER0, BAYER1, BAYER2, BAYER3},
-        blue_noise::BLUE_NOISE,
+        matrices::{BAYER0, BAYER1, BAYER2, BAYER3, BLUE_NOISE},
     },
     pixel_util::RGB,
 };
@@ -22,6 +20,43 @@ pub enum ThresholdType {
 }
 
 impl ThresholdType {
+    pub fn dither(
+        self,
+        data: &mut Vec<RGB>,
+        width: u32,
+        _height: u32,
+        color_map: &Vec<ColorMapElement>,
+    ) {
+        let mut index = 0;
+        while index < data.len() {
+            data[index] = self.dither_helper(
+                data[index].grayscale(),
+                color_map,
+                index % width as usize,
+                index / width as usize,
+            );
+
+            index += 1;
+        }
+    }
+
+    fn dither_helper(
+        self,
+        value: f64,
+        color_map: &Vec<ColorMapElement>,
+        x: usize,
+        y: usize,
+    ) -> RGB {
+        let mut index = 0;
+        while index < color_map.len() {
+            if value < self.get_threshold(x, y) * color_map[index].scale + color_map[index].offset {
+                return color_map[index].color;
+            }
+            index += 1;
+        }
+        return color_map.last().unwrap().color;
+    }
+
     fn get_threshold(self, x: usize, y: usize) -> f64 {
         match self {
             ThresholdType::Rand => rand::rng().random::<f64>(),
@@ -32,42 +67,4 @@ impl ThresholdType {
             ThresholdType::BlueNoise => BLUE_NOISE[y % 128 * 128 + x % 128],
         }
     }
-}
-
-pub fn dither_ordered(
-    data: &mut Vec<RGB>,
-    width: u32,
-    _height: u32,
-    ttype: ThresholdType,
-    color_map: &Vec<ColorMapElement>,
-) {
-    let mut index = 0;
-    while index < data.len() {
-        data[index] = dither_ordered_helper(
-            data[index].r,
-            color_map,
-            ttype,
-            index % width as usize,
-            index / width as usize,
-        );
-
-        index += 1;
-    }
-}
-
-fn dither_ordered_helper(
-    value: f64,
-    color_map: &Vec<ColorMapElement>,
-    ttype: ThresholdType,
-    x: usize,
-    y: usize,
-) -> RGB {
-    let mut index = 0;
-    while index < color_map.len() {
-        if value < ttype.get_threshold(x, y) * color_map[index].scale + color_map[index].offset {
-            return color_map[index].color;
-        }
-        index += 1;
-    }
-    return color_map.last().unwrap().color;
 }

@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::{fmt::{Debug, Display}, ops::{Add, Sub}};
 
 // values are defined in a range [0.0, 1.0]
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -8,6 +8,34 @@ pub struct RGB {
     pub b: f64,
     pub a: f64,
 }
+
+impl Add for RGB {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        RGB {
+            r: self.r + rhs.r,
+            g: self.g + rhs.g,
+            b: self.b + rhs.b,
+            a: self.a.max(rhs.a),
+        }
+    }
+}
+
+impl Sub for RGB {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+         RGB {
+            r: self.r - rhs.r,
+            g: self.g - rhs.g,
+            b: self.b - rhs.b,
+            a: self.a.min(rhs.a),
+        }
+    }
+}
+
+// TODO: implement multiplication to use 3D distance in error diffusion algorithm
 
 impl RGB {
     pub fn from_u8(r: u8, g: u8, b: u8, a: u8) -> RGB {
@@ -45,7 +73,7 @@ impl RGB {
         format!("{:X}{:X}{:X}", r, g, b)
     }
 
-    fn grayscale(&self) -> f64 {
+    pub fn grayscale(&self) -> f64 {
         0.299 * self.r + 0.587 * self.g + 0.114 * self.b
     }
 
@@ -60,9 +88,9 @@ impl RGB {
     }
 
     pub fn add_luminosity(&mut self, amount: f64) {
-        self.r = (self.r + amount).clamp(0.0, 1.0);
-        self.g = (self.g + amount).clamp(0.0, 1.0);
-        self.b = (self.b + amount).clamp(0.0, 1.0);
+        self.r = self.r + amount;
+        self.g = self.g + amount;
+        self.b = self.b + amount;
     }
 
     pub fn set_value(&mut self, value: f64) {

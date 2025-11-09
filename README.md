@@ -21,16 +21,18 @@ The program needs a config file to know how to edit your images:
 
 ```js
 {
+  "processing_width": 300, // max width at which all the processing is done (ratio is preserved)
+  "processing_height": 300, // max height at which all the processing is done (ratio is preserved)
   "brigthness_delta": 30, // increase/decrease brightness before dithering
   "constrast_delta": 30, // increase/decrease contrast before dithering
   "dithering_type": "blue_noise", // the dithering technique used, see list
-  "color_map": [ // the list of colors used for dithering, 
+  "color_map": [ // optional field: custom list of colors used for dithering,  (default is black and white)
     {
-      "color": "#101010", // the color in hex, the '#' at the beggining is optional
+      "color": "#101010", // color in hex, the '#' at the beggining is optional
       "magnitude": 0.8 // optional field: affects the amount of color used
     },
     {
-      "color": "0000aa", //doesn't matter if the letters are in uppercase or lowercase
+      "color": "0000aa", // doesn't matter if the letters are in uppercase or lowercase
       "offset": 0.15, // optional field: bias for lighter/darker color
       "magnitude": 0.85 
     },
@@ -39,10 +41,8 @@ The program needs a config file to know how to edit your images:
       "offset": 0.50,
       "magnitude": 0.5
     },
-    "color": "f0f0f0" // shorthand for when not using offset or magnitude
+    "f0f0f0" // shorthand for when not using offset or magnitude
   ],
-  "processing_width": 300, // the image width at which all the processing is done
-  "processing_height": 300, // the image height at which all the processing is done
   "output_scale": 4 // scale the image before writing it (done to preserve the pixel effect)
 }
 ```

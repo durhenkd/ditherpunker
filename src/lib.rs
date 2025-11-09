@@ -24,11 +24,10 @@ pub fn run(
 
     let mut rgbs = image_utils::dynimg_to_rgb(&image);
 
-    dithering::dither(
+    config.dithering_type.dither(
         &mut rgbs,
         image.width(),
         image.height(),
-        config.dithering_type,
         &config.color_map,
     );
 
