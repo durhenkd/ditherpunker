@@ -1,4 +1,4 @@
-use image::{imageops::FilterType, DynamicImage};
+use image::{DynamicImage, imageops::FilterType};
 
 use crate::config::ProcessConfig;
 
@@ -24,12 +24,9 @@ pub fn run(
 
     let mut rgbs = image_utils::dynimg_to_rgb(&image);
 
-    config.dithering_type.dither(
-        &mut rgbs,
-        image.width(),
-        image.height(),
-        &config.color_map,
-    );
+    config
+        .dithering_type
+        .dither(&mut rgbs, image.width(), image.height(), &config.color_map);
 
     let new_image = image_utils::rgb_to_dynimg(&rgbs, image.width(), image.height());
     let new_image = new_image.resize(

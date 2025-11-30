@@ -2,9 +2,7 @@ mod matrices;
 
 use crate::{
     color_palette::ColorMapElement,
-    dithering::threshold::{
-        matrices::{BAYER0, BAYER1, BAYER2, BAYER3, BLUE_NOISE},
-    },
+    dithering::threshold::matrices::{BAYER0, BAYER1, BAYER2, BAYER3, BLUE_NOISE},
     pixel_util::RGB,
 };
 use rand::Rng;

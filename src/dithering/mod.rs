@@ -1,4 +1,8 @@
-use crate::{color_palette::ColorMapElement, dithering::{error_diffusion::ErrorDiffusionType, threshold::ThresholdType}, pixel_util::RGB};
+use crate::{
+    color_palette::ColorMapElement,
+    dithering::{error_diffusion::ErrorDiffusionType, threshold::ThresholdType},
+    pixel_util::RGB,
+};
 
 mod error_diffusion;
 mod threshold;
@@ -31,8 +35,12 @@ impl DitheringType {
             Self::Bayer2 => ThresholdType::Bayer2.dither(data, width, height, color_map),
             Self::Bayer3 => ThresholdType::Bayer3.dither(data, width, height, color_map),
             Self::BlueNoise => ThresholdType::BlueNoise.dither(data, width, height, color_map),
-            Self::FloydSteinberg => ErrorDiffusionType::FloydSteinberg.dither(data, width, height, color_map),
-            Self::JarvisJudiceNinke => ErrorDiffusionType::JarvisJudiceNinke.dither(data, width, height, color_map),
+            Self::FloydSteinberg => {
+                ErrorDiffusionType::FloydSteinberg.dither(data, width, height, color_map)
+            }
+            Self::JarvisJudiceNinke => {
+                ErrorDiffusionType::JarvisJudiceNinke.dither(data, width, height, color_map)
+            }
             Self::Atkinson => ErrorDiffusionType::Atkinson.dither(data, width, height, color_map),
         };
     }

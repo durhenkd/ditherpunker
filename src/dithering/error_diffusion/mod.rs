@@ -69,8 +69,7 @@ impl ErrorDiffusionType {
         factor[origin] = 0.0;
 
         let mut index_data: usize = 0;
-        while index_data < data.len()  {
-
+        while index_data < data.len() {
             /*
             give the pixel a color and calculate the difference
             */
@@ -133,7 +132,7 @@ fn discrete_and_calculate_error(pixel: &mut RGB, color_map: &Vec<ColorMapElement
     }
 
     let last_element = color_map[min_index];
-    let error = pixel.grayscale() - last_element.scale ;
+    let error = pixel.grayscale() - last_element.scale;
     (*pixel) = last_element.color;
     return error;
 }
@@ -155,7 +154,6 @@ fn calculate_offset_matrix(matrix_dimenisons: [usize; 2], width: u32, origin: us
     return offsets;
 }
 
-
 #[cfg(test)]
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
@@ -163,25 +161,29 @@ mod tests {
 
     #[test]
     fn test_calculate_offset_matrix() {
-
         let error_diffusion_matrix = vec![0.20, -1.0, 0.15, 0.10, 0.10, 0.20, 0.20, 0.05];
-        let origin_index = error_diffusion_matrix.iter().position(|x| *x == -1.0).unwrap();
+        let origin_index = error_diffusion_matrix
+            .iter()
+            .position(|x| *x == -1.0)
+            .unwrap();
 
         assert_eq!(origin_index, 1);
 
-        let matrix = calculate_offset_matrix([4,2], 300, origin_index);
+        let matrix = calculate_offset_matrix([4, 2], 300, origin_index);
         assert_eq!(matrix, vec![-1, 0, 1, 2, 299, 300, 301, 302]);
     }
 
     #[test]
     fn test_calculate_offset_matrix_2() {
-
         let error_diffusion_matrix = vec![-1.0, 0.0, 0.15, 0.10, 0.10, 0.20, 0.20, 0.05];
-        let origin_index = error_diffusion_matrix.iter().position(|x| *x == -1.0).unwrap();
+        let origin_index = error_diffusion_matrix
+            .iter()
+            .position(|x| *x == -1.0)
+            .unwrap();
 
         assert_eq!(origin_index, 0);
 
-        let matrix = calculate_offset_matrix([4,2], 300, origin_index);
+        let matrix = calculate_offset_matrix([4, 2], 300, origin_index);
         assert_eq!(matrix, vec![0, 1, 2, 3, 300, 301, 302, 303]);
     }
 
@@ -189,14 +191,24 @@ mod tests {
     fn test_normalize_color_map() {
         let mut color_map: Vec<ColorMapElement> = vec![
             ColorMapElement {
-                color: RGB { r: 0.0, g: 0.0, b: 0.0, a: 1.00 },
+                color: RGB {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 1.00,
+                },
                 scale: 1.0,
-                offset: 0.0
+                offset: 0.0,
             },
-             ColorMapElement {
-                color: RGB { r: 1.0, g: 1.0, b: 1.0, a: 1.00 },
+            ColorMapElement {
+                color: RGB {
+                    r: 1.0,
+                    g: 1.0,
+                    b: 1.0,
+                    a: 1.00,
+                },
                 scale: 1.0,
-                offset: 0.0
+                offset: 0.0,
             },
         ];
 

@@ -3,7 +3,6 @@ use std::env;
 use ditherpunker::{config::ProcessConfig, image_utils, run};
 
 fn main() {
-
     let args: Vec<String> = env::args().collect();
 
     let input_image_path = &args[1];
@@ -14,10 +13,5 @@ fn main() {
     let config: ProcessConfig = ProcessConfig::read_config(process_config_path).unwrap();
     let processed_image = run(config, image).unwrap();
 
-    image_utils::write_image(
-        &processed_image,
-        output_image_path,
-        image::ImageFormat::Png,
-    )
-    .unwrap();
+    image_utils::write_image(&processed_image, output_image_path, image::ImageFormat::Png).unwrap();
 }

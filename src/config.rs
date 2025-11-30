@@ -5,7 +5,7 @@ use std::{
     io::{Read, Write},
 };
 
-use json::{object, JsonValue};
+use json::{JsonValue, object};
 
 use crate::{
     color_palette::{ColorMapElement, DEFAULT_COLOR_MAP},

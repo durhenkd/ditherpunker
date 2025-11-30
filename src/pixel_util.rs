@@ -1,4 +1,7 @@
-use std::{fmt::{Debug, Display}, ops::{Add, Sub}};
+use std::{
+    fmt::{Debug, Display},
+    ops::{Add, Sub},
+};
 
 // values are defined in a range [0.0, 1.0]
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -26,7 +29,7 @@ impl Sub for RGB {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-         RGB {
+        RGB {
             r: self.r - rhs.r,
             g: self.g - rhs.g,
             b: self.b - rhs.b,
@@ -69,7 +72,7 @@ impl RGB {
         let r = (self.r * 255.0) as u8;
         let g = (self.g * 255.0) as u8;
         let b = (self.b * 255.0) as u8;
-        
+
         format!("{:X}{:X}{:X}", r, g, b)
     }
 

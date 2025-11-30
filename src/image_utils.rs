@@ -1,6 +1,6 @@
 use crate::pixel_util::RGB;
 use image::{
-    metadata::Cicp, ConvertColorOptions, DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgba,
+    ConvertColorOptions, DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgba, metadata::Cicp,
 };
 use std::fs::File;
 
