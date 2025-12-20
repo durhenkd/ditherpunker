@@ -1,9 +1,10 @@
-mod matrices;
+pub mod bayer_transform;
+pub mod matrices;
 
 use crate::{
     color_palette::ColorMapElement,
     dithering::threshold::matrices::{BAYER0, BAYER1, BAYER2, BAYER3, BLUE_NOISE},
-    pixel_util::RGB,
+    utils::pixel::RGB,
 };
 use rand::Rng;
 
@@ -18,13 +19,7 @@ pub enum ThresholdType {
 }
 
 impl ThresholdType {
-    pub fn dither(
-        self,
-        data: &mut Vec<RGB>,
-        width: u32,
-        _height: u32,
-        color_map: &Vec<ColorMapElement>,
-    ) {
+    pub fn dither(self, data: &mut [RGB], width: u32, _height: u32, color_map: &[ColorMapElement]) {
         let mut index = 0;
         while index < data.len() {
             data[index] = self.dither_helper(
@@ -38,13 +33,7 @@ impl ThresholdType {
         }
     }
 
-    fn dither_helper(
-        self,
-        value: f64,
-        color_map: &Vec<ColorMapElement>,
-        x: usize,
-        y: usize,
-    ) -> RGB {
+    fn dither_helper(self, value: f64, color_map: &[ColorMapElement], x: usize, y: usize) -> RGB {
         let mut index = 0;
         while index < color_map.len() {
             if value < self.get_threshold(x, y) * color_map[index].scale + color_map[index].offset {
@@ -52,7 +41,8 @@ impl ThresholdType {
             }
             index += 1;
         }
-        return color_map.last().unwrap().color;
+
+        color_map.last().unwrap().color
     }
 
     fn get_threshold(self, x: usize, y: usize) -> f64 {
@@ -64,5 +54,44 @@ impl ThresholdType {
             ThresholdType::Bayer3 => 1.0 - BAYER3[y % 16 * 16 + x % 16],
             ThresholdType::BlueNoise => BLUE_NOISE[y % 128 * 128 + x % 128],
         }
+    }
+
+    pub fn dither_bench(
+        self,
+        grayscale_data: &[f64],
+        output: &mut [crate::utils::pixel::RGB],
+        width: usize,
+        _height: usize,
+        color_map: &[crate::color_palette::ColorMapElement],
+    ) {
+        let mut index = 0;
+        while index < grayscale_data.len() {
+            output[index] = self.dither_helper_bench(
+                grayscale_data[index],
+                color_map,
+                index % width,
+                index / width,
+            );
+
+            index += 1;
+        }
+    }
+
+    fn dither_helper_bench(
+        self,
+        value: f64,
+        color_map: &[crate::color_palette::ColorMapElement],
+        x: usize,
+        y: usize,
+    ) -> RGB {
+        let mut index = 0;
+        while index < color_map.len() {
+            if value < self.get_threshold(x, y) * color_map[index].scale + color_map[index].offset {
+                return color_map[index].color;
+            }
+            index += 1;
+        }
+
+        color_map.last().unwrap().color
     }
 }

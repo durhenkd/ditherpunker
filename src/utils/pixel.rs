@@ -51,7 +51,7 @@ impl RGB {
     }
 
     pub fn from_hex(string: String) -> Result<RGB, Box<dyn std::error::Error>> {
-        let clean_string = String::from(string.trim().to_lowercase()).replace("#", "");
+        let clean_string = string.trim().to_lowercase().replace("#", "");
         let r_str = &clean_string[0..2];
         let g_str = &clean_string[2..4];
         let b_str = &clean_string[4..6];
@@ -60,12 +60,7 @@ impl RGB {
         let g = u32::from_str_radix(g_str, 16)? as f64 / 255.0;
         let b = u32::from_str_radix(b_str, 16)? as f64 / 255.0;
 
-        Ok(RGB {
-            r: r,
-            g: g,
-            b: b,
-            a: 1.0,
-        })
+        Ok(RGB { r, g, b, a: 1.0 })
     }
 
     pub fn to_hex(&self) -> String {
@@ -74,6 +69,14 @@ impl RGB {
         let b = (self.b * 255.0) as u8;
 
         format!("{:X}{:X}{:X}", r, g, b)
+    }
+
+    pub fn to_i32(&self) -> i32 {
+        let r = (self.r * 255.0) as i32;
+        let g = (self.g * 255.0) as i32;
+        let b = (self.b * 255.0) as i32;
+
+        r << 16 | g << 8 | b
     }
 
     pub fn grayscale(&self) -> f64 {
@@ -91,9 +94,9 @@ impl RGB {
     }
 
     pub fn add_luminosity(&mut self, amount: f64) {
-        self.r = self.r + amount;
-        self.g = self.g + amount;
-        self.b = self.b + amount;
+        self.r += amount;
+        self.g += amount;
+        self.b += amount;
     }
 
     pub fn set_value(&mut self, value: f64) {

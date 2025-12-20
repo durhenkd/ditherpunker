@@ -1,4 +1,4 @@
-use crate::pixel_util::RGB;
+use crate::utils::pixel::RGB;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ColorMapElement {

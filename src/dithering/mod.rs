@@ -1,11 +1,16 @@
+use std::simd::cmp::SimdPartialOrd;
+
+use itertools::Itertools;
+
 use crate::{
     color_palette::ColorMapElement,
     dithering::{error_diffusion::ErrorDiffusionType, threshold::ThresholdType},
-    pixel_util::RGB,
+    utils::buffer::uninitialized_buffer,
+    utils::pixel::RGB,
 };
 
-mod error_diffusion;
-mod threshold;
+pub mod error_diffusion;
+pub mod threshold;
 
 #[derive(Debug, Clone, Copy)]
 pub enum DitheringType {
@@ -21,13 +26,7 @@ pub enum DitheringType {
 }
 
 impl DitheringType {
-    pub fn dither(
-        &self,
-        data: &mut Vec<RGB>,
-        width: u32,
-        height: u32,
-        color_map: &Vec<ColorMapElement>,
-    ) {
+    pub fn dither(&self, data: &mut [RGB], width: u32, height: u32, color_map: &[ColorMapElement]) {
         match self {
             Self::Rand => ThresholdType::Rand.dither(data, width, height, color_map),
             Self::Bayer0 => ThresholdType::Bayer0.dither(data, width, height, color_map),

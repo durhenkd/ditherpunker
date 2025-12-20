@@ -76,7 +76,7 @@ pub const BAYER1: [f64; 16] = generate_bayer_matrix::<16>(2);
 pub const BAYER2: [f64; 64] = generate_bayer_matrix::<64>(3);
 pub const BAYER3: [f64; 256] = generate_bayer_matrix::<256>(4);
 
-pub const BLUE_NOISE: [f64; 16384] = [
+pub static BLUE_NOISE: [f64; 16384] = [
     0.28627450980392155,
     0.0784313725490196,
     0.8156862745098039,

@@ -1,4 +1,4 @@
-use crate::pixel_util::RGB;
+use crate::utils::pixel::RGB;
 use image::{
     ConvertColorOptions, DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgba, metadata::Cicp,
 };
@@ -31,7 +31,7 @@ pub fn dynimg_to_rgb(image: &DynamicImage) -> Vec<RGB> {
         .collect::<Vec<RGB>>()
 }
 
-pub fn rgb_to_dynimg(rgbs: &Vec<RGB>, width: u32, height: u32) -> DynamicImage {
+pub fn rgb_to_dynimg(rgbs: &[RGB], width: u32, height: u32) -> DynamicImage {
     let raw_data = rgbs
         .iter()
         .flat_map(|p| {

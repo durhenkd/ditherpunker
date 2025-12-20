@@ -10,7 +10,7 @@ use json::{JsonValue, object};
 use crate::{
     color_palette::{ColorMapElement, DEFAULT_COLOR_MAP},
     dithering::DitheringType,
-    pixel_util::RGB,
+    utils::pixel::RGB,
 };
 
 #[derive(Debug)]
@@ -80,19 +80,13 @@ impl ProcessConfig {
                         None => return ConfigError::get("Couldn't parse color_map.*.color"),
                     },
                 };
-                let scale = match json["color_map"][index]["scale"].as_f64() {
-                    Some(val) => val,
-                    None => 1.0,
-                };
-                let offset = match json["color_map"][index]["offset"].as_f64() {
-                    Some(val) => val,
-                    None => 0.0,
-                };
+                let scale = json["color_map"][index]["scale"].as_f64().unwrap_or(1.0);
+                let offset = json["color_map"][index]["offset"].as_f64().unwrap_or(0.0);
 
                 color_map.push(ColorMapElement {
                     color: RGB::from_hex(color)?,
-                    scale: scale,
-                    offset: offset,
+                    scale,
+                    offset,
                 });
 
                 index += 1;
@@ -101,13 +95,13 @@ impl ProcessConfig {
         };
 
         Ok(ProcessConfig {
-            brigthness_delta: brigthness_delta,
-            constrast_delta: constrast_delta,
-            dithering_type: dithering_type,
-            color_map: color_map,
-            processing_width: processing_width,
-            processing_height: processing_height,
-            output_scale: output_scale,
+            brigthness_delta,
+            constrast_delta,
+            dithering_type,
+            color_map,
+            processing_width,
+            processing_height,
+            output_scale,
         })
     }
 
