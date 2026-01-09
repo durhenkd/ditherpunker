@@ -1,8 +1,9 @@
+use std::fs::File;
+
 use crate::utils::pixel::RGB;
 use image::{
     ConvertColorOptions, DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgba, metadata::Cicp,
 };
-use std::fs::File;
 
 pub fn read_image(path: &String) -> Result<DynamicImage, Box<dyn std::error::Error>> {
     let mut image = ImageReader::open(path)?.decode()?;

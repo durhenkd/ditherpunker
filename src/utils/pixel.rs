@@ -50,6 +50,10 @@ impl RGB {
         }
     }
 
+    pub fn from_u8_array(p: &[u8; 4]) -> Self {
+        Self::from_u8(p[0], p[1], p[2], p[3])
+    }
+
     pub fn from_hex(string: String) -> Result<RGB, Box<dyn std::error::Error>> {
         let clean_string = string.trim().to_lowercase().replace("#", "");
         let r_str = &clean_string[0..2];
