@@ -33,7 +33,7 @@ impl ThresholdType {
         }
     }
 
-    fn dither_helper(self, value: f64, color_map: &[ColorMapElement], x: usize, y: usize) -> RGB {
+    fn dither_helper(self, value: f32, color_map: &[ColorMapElement], x: usize, y: usize) -> RGB {
         let mut index = 0;
         while index < color_map.len() {
             if value < self.get_threshold(x, y) * color_map[index].scale + color_map[index].offset {
@@ -45,20 +45,21 @@ impl ThresholdType {
         color_map.last().unwrap().color
     }
 
-    fn get_threshold(self, x: usize, y: usize) -> f64 {
+    fn get_threshold(self, x: usize, y: usize) -> f32 {
         match self {
-            ThresholdType::Rand => rand::rng().random::<f64>(),
+            ThresholdType::Rand => rand::rng().random::<f32>(),
             ThresholdType::Bayer0 => 1.0 - BAYER0[y % 2 * 2 + x % 2],
             ThresholdType::Bayer1 => 1.0 - BAYER1[y % 4 * 4 + x % 4],
             ThresholdType::Bayer2 => 1.0 - BAYER2[y % 8 * 8 + x % 8],
             ThresholdType::Bayer3 => 1.0 - BAYER3[y % 16 * 16 + x % 16],
-            ThresholdType::BlueNoise => BLUE_NOISE[y % 128 * 128 + x % 128],
+            ThresholdType::BlueNoise => todo!("adjust precision"),
+            // ThresholdType::BlueNoise => BLUE_NOISE[y % 128 * 128 + x % 128],
         }
     }
 
     pub fn dither_bench(
         self,
-        grayscale_data: &[f64],
+        grayscale_data: &[f32],
         output: &mut [crate::utils::pixel::RGB],
         width: usize,
         _height: usize,
@@ -79,7 +80,7 @@ impl ThresholdType {
 
     fn dither_helper_bench(
         self,
-        value: f64,
+        value: f32,
         color_map: &[crate::color_palette::ColorMapElement],
         x: usize,
         y: usize,

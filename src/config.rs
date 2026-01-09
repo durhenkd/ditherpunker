@@ -80,8 +80,8 @@ impl ProcessConfig {
                         None => return ConfigError::get("Couldn't parse color_map.*.color"),
                     },
                 };
-                let scale = json["color_map"][index]["scale"].as_f64().unwrap_or(1.0);
-                let offset = json["color_map"][index]["offset"].as_f64().unwrap_or(0.0);
+                let scale = json["color_map"][index]["scale"].as_f32().unwrap_or(1.0);
+                let offset = json["color_map"][index]["offset"].as_f32().unwrap_or(0.0);
 
                 color_map.push(ColorMapElement {
                     color: RGB::from_hex(color)?,

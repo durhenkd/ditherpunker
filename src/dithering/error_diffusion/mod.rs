@@ -47,7 +47,7 @@ impl ErrorDiffusionType {
     }
 
     fn dither_helper(
-        matrix: Vec<f64>,
+        matrix: Vec<f32>,
         matrix_dimenisons: [usize; 2],
         data: &mut [RGB],
         width: u32,
@@ -67,7 +67,7 @@ impl ErrorDiffusionType {
             /*
             give the pixel a color and calculate the difference
             */
-            let error: f64 = discrete_and_calculate_error(&mut data[index_data], color_map);
+            let error: f32 = discrete_and_calculate_error(&mut data[index_data], color_map);
 
             /*
             distribute the difference to nearby pixels
@@ -111,10 +111,10 @@ fn normalize_color_map(color_map: &mut [ColorMapElement]) {
     color_map[0].scale = 0.0;
 }
 
-fn discrete_and_calculate_error(pixel: &mut RGB, color_map: &[ColorMapElement]) -> f64 {
+fn discrete_and_calculate_error(pixel: &mut RGB, color_map: &[ColorMapElement]) -> f32 {
     let mut index_map = 0;
     let mut min_index = 0;
-    let mut min_diff = f64::MAX;
+    let mut min_diff = f32::MAX;
     while index_map < color_map.len() {
         let diff = (pixel.grayscale() - color_map[index_map].scale).abs();
         if diff < min_diff {
