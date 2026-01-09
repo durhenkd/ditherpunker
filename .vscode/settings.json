@@ -1,0 +1,21 @@
+{
+  "editor.tabSize": 4,
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.check.allTargets": true,
+  "rust-analyzer.check.features": "all",
+  "rust-analyzer.check.extraArgs": [
+    "--",
+    "-A",
+    "clippy::needless_range_loop",
+    "-A",
+    "clippy::manual_range_contains",
+    "-W",
+    "unused",
+    "-W",
+    "dead_code"
+  ],
+  "editor.formatOnSave": true,
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer"
+  }
+}

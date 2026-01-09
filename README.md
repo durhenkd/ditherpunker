@@ -6,9 +6,10 @@ This is an image editing software which aims to turns regular photos into [dithe
 
 Ditherpunk is a pixel art style which is charactized by low number of colors (often 1-bit, black & white) making the use of dithering necessary to create the illusion of shading. There are a couple of indie games making fantastic use of this aesthetic, like [Return of the Obra Dinn](https://store.steampowered.com/app/653530/Return_of_the_Obra_Dinn/) and [Critters for Sale](https://store.steampowered.com/app/1078420/Critters_for_Sale/).
 
-## How to use this 
+## How to use this
 
 This repo doesn't have a release yet, just install the rust toolchain, use your favourite shell, and:
+
 ```
 cargo run -- input/file/path.png output/file/path.png path_to_config.json
 ```
@@ -34,7 +35,7 @@ The program needs a config file to know how to edit your images:
     {
       "color": "0000aa", // doesn't matter if the letters are in uppercase or lowercase
       "offset": 0.15, // optional field: bias for lighter/darker color
-      "magnitude": 0.85 
+      "magnitude": 0.85
     },
     {
       "color": "10F022",
@@ -51,10 +52,10 @@ The program needs a config file to know how to edit your images:
 
 - `rand` - pure randomness, works better with bigger processing sizes
 - `bayer_0` - Bayer(0) 2x2 matrix, clear patterns
-- `bayer_1` - Bayer(1) 4x4  matrix, clear patterns
+- `bayer_1` - Bayer(1) 4x4 matrix, clear patterns
 - `bayer_2` - Bayer(2) 8x8 matrix, can leave some unpleasing artefacts on the image
 - `bayer_3` - Bayer(3) 16x16 matrix, can leave some unpleasing artefacts on the image
 - `blue_noise` - uses a pre-computed 128x128 blue noise texture
-- `atkinson` - error-diffusion with the Atkinson matrix (***NOT IMPLEMENTED***)
-- `jarvis` - error-diffusion with the Jarvis-Judice-Ninke matrix (***NOT IMPLEMENTED***)
-- `floyd` - error-diffusion with the Floyd-Steinberg matrix (***NOT IMPLEMENTED***)
+- `atkinson` - error-diffusion with the Atkinson matrix (**_NOT IMPLEMENTED_**)
+- `jarvis` - error-diffusion with the Jarvis-Judice-Ninke matrix (**_NOT IMPLEMENTED_**)
+- `floyd` - error-diffusion with the Floyd-Steinberg matrix (**_NOT IMPLEMENTED_**)
