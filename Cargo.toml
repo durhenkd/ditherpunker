@@ -38,13 +38,9 @@ harness = false
 name = "bayer_transform_par_fit_strategy"
 harness = false
 
-# [[bench]]
-# name = "bayer_threshold"
-# harness = false
-
-# [[bench]]
-# name = "iteration"
-# harness = false
+[[bench]]
+name = "iteration"
+harness = false
 
 # [profile.release]
 # lto = true
