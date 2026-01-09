@@ -5,10 +5,14 @@
   "rust-analyzer.check.features": "all",
   "rust-analyzer.check.extraArgs": [
     "--",
-    "-D",
-    "warnings",
     "-A",
-    "clippy::needless_range_loop"
+    "clippy::needless_range_loop",
+    "-A",
+    "clippy::manual_range_contains",
+    "-W",
+    "unused",
+    "-W",
+    "dead_code"
   ],
   "editor.formatOnSave": true,
   "[rust]": {
