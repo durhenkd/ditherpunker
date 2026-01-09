@@ -1,9 +1,13 @@
-use std::fs::File;
-
-use crate::utils::pixel::RGB;
-use image::{
-    ConvertColorOptions, DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgba, metadata::Cicp,
+use crate::{
+    texture::{TextureOps, TextureRef},
+    utils::pixel::RGB,
 };
+use image::{
+    ConvertColorOptions, DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgba,
+    codecs::png::{CompressionType, FilterType, PngEncoder},
+    metadata::Cicp,
+};
+use std::{fs::File, path::Path};
 
 pub fn read_image(path: &String) -> Result<DynamicImage, Box<dyn std::error::Error>> {
     let mut image = ImageReader::open(path)?.decode()?;
@@ -49,4 +53,29 @@ pub fn rgb_to_dynimg(rgbs: &[RGB], width: u32, height: u32) -> DynamicImage {
         ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, raw_data)
             .expect("Could construct an image"),
     )
+}
+
+/// From a TextureRef construct an ImageBuffer without copying
+/// and write to file using png encoder.
+pub(crate) fn write_png_texture<Pixel, T>(
+    texture: TextureRef<'_, T>,
+    path: &Path,
+    compression: CompressionType,
+    filtering: FilterType,
+) -> crate::error::Result
+where
+    Pixel: image::Pixel + image::PixelWithColorType,
+    T: image::Primitive + image::Enlargeable,
+    // ImageBuffer::from_raw
+    for<'a> &'a [T]: std::ops::Deref<Target = [Pixel::Subpixel]>,
+    // write_with_encoder
+    [<Pixel as image::Pixel>::Subpixel]: image::EncodableLayout,
+{
+    let image_buf =
+        ImageBuffer::<Pixel, &[T]>::from_raw(texture.width(), texture.height(), texture.as_ref())
+            .expect("image buffers don't match");
+    let file = &mut std::io::BufWriter::new(std::fs::File::create(path)?);
+    let encoder = PngEncoder::new_with_quality(file, compression, filtering);
+    image_buf.write_with_encoder(encoder)?;
+    Ok(())
 }
