@@ -1,5 +1,6 @@
 pub mod bayer_transform;
 pub mod matrices;
+mod multi_impl;
 
 use crate::{
     color_palette::ColorMapElement,

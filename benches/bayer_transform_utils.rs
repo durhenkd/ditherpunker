@@ -4,11 +4,11 @@ use criterion::{BenchmarkGroup, BenchmarkId, measurement::WallTime};
 use ditherpunker::{
     color_palette::ColorMapElement,
     dithering::threshold::{
-        bayer_transform::{BayerArgs, BayerConfig, BayerStrategy},
+        bayer_transform::{BayerConfig, BayerStrategy},
         matrices,
     },
-    texture::Texture,
-    transform::Transform,
+    texture::{Texture, TextureRef},
+    transform::prelude::*,
     utils::pixel::RGB,
 };
 use itertools::Itertools;
@@ -51,15 +51,12 @@ pub fn benchmark_strategy(
     size: u32,
 ) {
     let (input, mut output) = std::hint::black_box(data(size));
-    let mut args = std::hint::black_box(BayerArgs::new(
-        std::hint::black_box(input.as_ref_texture()),
-        std::hint::black_box(output.as_ref_mut_texture()),
-    ));
     let mut transform = strategy.build(config);
+    transform.prepare(input.shape(), output.shape());
 
     group.bench_with_input(id, &strategy, |b, _| {
         b.iter(|| {
-            transform.apply(&mut args);
+            transform.apply(input.as_texture_slice(), output.as_texture_mut_slice());
         });
     });
 }

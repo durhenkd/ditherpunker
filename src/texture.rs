@@ -3,7 +3,27 @@ use std::path::Path;
 
 use crate::utils::buffer::uninitialized_buffer;
 
-/// Texture with owned internal buffer.
+pub type TextureShape = (usize, usize);
+
+/// Trait defining ops available on Textures with
+/// lendable inner buffer
+pub trait TextureRef: AsRef<[Self::Inner]> {
+    type Inner;
+
+    fn width(&self) -> u32;
+    fn height(&self) -> u32;
+
+    #[inline]
+    fn shape(&self) -> TextureShape {
+        (self.width() as usize, self.height() as usize)
+    }
+}
+
+/// Trait defining ops available on mutable
+/// Textures
+pub trait TextureMut: TextureRef + AsMut<[Self::Inner]> {}
+
+/// Texture with owned buffer.
 #[derive(Debug, Clone)]
 pub struct Texture<T> {
     width: u32,
@@ -25,6 +45,22 @@ impl<T> AsMut<[T]> for Texture<T> {
     }
 }
 
+impl<T> TextureRef for Texture<T> {
+    type Inner = T;
+
+    #[inline]
+    fn width(&self) -> u32 {
+        self.width
+    }
+
+    #[inline]
+    fn height(&self) -> u32 {
+        self.height
+    }
+}
+
+impl<T> TextureMut for Texture<T> {}
+
 impl<T> Texture<T> {
     /// # Safety
     ///
@@ -37,16 +73,16 @@ impl<T> Texture<T> {
         }
     }
 
-    pub fn as_ref_texture(&self) -> TextureRef<'_, T> {
-        TextureRef {
+    pub fn as_texture_slice<'s>(&'s self) -> TextureSlice<'s, T> {
+        TextureSlice {
             width: self.width,
             height: self.height,
             buffer: &self.buffer,
         }
     }
 
-    pub fn as_ref_mut_texture(&mut self) -> TextureMutRef<'_, T> {
-        TextureMutRef {
+    pub fn as_texture_mut_slice<'s>(&'s mut self) -> TextureMutSlice<'s, T> {
+        TextureMutSlice {
             width: self.width,
             height: self.height,
             buffer: &mut self.buffer,
@@ -69,7 +105,7 @@ impl<T: std::clone::Clone> Texture<T> {
     }
 }
 
-impl<T: std::default::Default + std::clone::Clone> Texture<T> {
+impl<T: Default + Copy> Texture<T> {
     pub fn new(width: u32, height: u32) -> Self {
         Self {
             width,
@@ -138,20 +174,32 @@ impl<T: image::Primitive> From<ImageBuffer<image::Luma<T>, Vec<T>>> for Texture<
 
 /// Texture with borrowed internal buffer
 #[derive(Debug, Copy, Clone)]
-pub struct TextureRef<'a, T> {
+pub struct TextureSlice<'a, T> {
     width: u32,
     height: u32,
     buffer: &'a [T],
 }
 
-impl<'a, T> AsRef<[T]> for TextureRef<'a, T> {
+impl<T> AsRef<[T]> for TextureSlice<'_, T> {
     #[inline]
     fn as_ref(&self) -> &[T] {
         self.buffer
     }
 }
 
-impl<'a, T> TextureRef<'a, T> {
+impl<T> TextureRef for TextureSlice<'_, T> {
+    type Inner = T;
+
+    fn width(&self) -> u32 {
+        self.width
+    }
+
+    fn height(&self) -> u32 {
+        self.height
+    }
+}
+
+impl<'a, T> TextureSlice<'a, T> {
     pub fn new(width: u32, height: u32, buffer: &'a [T]) -> Self {
         Self {
             width,
@@ -162,78 +210,47 @@ impl<'a, T> TextureRef<'a, T> {
 }
 
 #[derive(Debug)]
-pub struct TextureMutRef<'a, T> {
+pub struct TextureMutSlice<'a, T> {
     width: u32,
     height: u32,
     buffer: &'a mut [T],
 }
 
-impl<'a, T> AsRef<[T]> for TextureMutRef<'a, T> {
+impl<'a, T> AsRef<[T]> for TextureMutSlice<'a, T> {
     #[inline]
     fn as_ref(&self) -> &[T] {
         self.buffer
     }
 }
 
-impl<'a, T> AsMut<[T]> for TextureMutRef<'a, T> {
+impl<'a, T> AsMut<[T]> for TextureMutSlice<'a, T> {
     #[inline]
     fn as_mut(&mut self) -> &mut [T] {
         self.buffer
     }
 }
 
-impl<'a, T> TextureMutRef<'a, T> {
+impl<T> TextureRef for TextureMutSlice<'_, T> {
+    type Inner = T;
+
+    fn width(&self) -> u32 {
+        self.width
+    }
+
+    fn height(&self) -> u32 {
+        self.height
+    }
+}
+
+impl<T> TextureMut for TextureMutSlice<'_, T> {}
+
+impl<'a, T> TextureMutSlice<'a, T> {
     pub fn new(width: u32, height: u32, buffer: &'a mut [T]) -> Self {
         Self {
             width,
             height,
             buffer,
         }
-    }
-}
-
-pub trait TextureOps: AsRef<[Self::Inner]> {
-    type Inner;
-
-    fn width(&self) -> u32;
-    fn height(&self) -> u32;
-}
-
-impl<T> TextureOps for Texture<T> {
-    type Inner = T;
-
-    #[inline]
-    fn width(&self) -> u32 {
-        self.width
-    }
-
-    #[inline]
-    fn height(&self) -> u32 {
-        self.height
-    }
-}
-
-impl<T> TextureOps for TextureRef<'_, T> {
-    type Inner = T;
-
-    fn width(&self) -> u32 {
-        self.width
-    }
-
-    fn height(&self) -> u32 {
-        self.height
-    }
-}
-
-impl<T> TextureOps for TextureMutRef<'_, T> {
-    type Inner = T;
-
-    fn width(&self) -> u32 {
-        self.width
-    }
-
-    fn height(&self) -> u32 {
-        self.height
     }
 }
 
@@ -264,3 +281,7 @@ impl<T> TextureOps for TextureMutRef<'_, T> {
 
 // impl WriteLumaPng<image::Luma<u8>, u8> for TextureRef<'_, u8> {}
 // impl WriteLumaPng<image::Rgba<u8>, u8> for TextureRef<'_, u8> {}
+
+pub mod prelude {
+    pub use super::{Texture, TextureMut, TextureMutSlice, TextureRef, TextureSlice};
+}

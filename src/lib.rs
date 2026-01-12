@@ -45,3 +45,10 @@ pub fn run(
 
     Ok(new_image)
 }
+
+pub mod prelude {
+    pub use super::{
+        color_palette::*, error::*, texture::prelude::*, transform::prelude::*, utils::prelude::*,
+    };
+    // TODO: add dithering API utils here.
+}

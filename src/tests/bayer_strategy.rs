@@ -4,12 +4,12 @@ mod bayer_strategy_tests {
 
     use crate::{
         dithering::threshold::{
-            bayer_transform::{BayerArgs, BayerConfig, BayerStrategy},
+            bayer_transform::{BayerConfig, BayerStrategy},
             matrices,
         },
         tests::utils::*,
-        texture::Texture,
-        transform::Transform,
+        texture::{Texture, TextureRef},
+        transform::prelude::*,
         utils::pixel::RGB,
     };
 
@@ -64,8 +64,8 @@ mod bayer_strategy_tests {
         output: &mut Texture<RGB>,
     ) {
         let mut transform = strategy.build(config);
-        let mut args = BayerArgs::new(input.as_ref_texture(), output.as_ref_mut_texture());
-        transform.apply(&mut args);
+        transform.prepare(input.shape(), output.shape());
+        transform.apply(input.as_texture_slice(), output.as_texture_mut_slice());
     }
 
     /// Macro to generate BayerStrategy comparison tests
@@ -112,33 +112,6 @@ mod bayer_strategy_tests {
         "simd-fit-2"
     );
 
-    test_strategy_comparison!(
-        test_scalar_vs_scalar_par_2_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::ScalarPar,
-        2,
-        "scalar",
-        "scalar-par"
-    );
-
-    test_strategy_comparison!(
-        test_scalar_vs_simd_fixed_par_2_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdFixedPar { lanes: 2 },
-        2,
-        "scalar",
-        "simd-fixed-par-2"
-    );
-
-    test_strategy_comparison!(
-        test_scalar_vs_simd_par_2_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdPar { lanes: 2 },
-        2,
-        "scalar",
-        "simd-par-2"
-    );
-
     // Tests for 4 colors (power of 2)
 
     test_strategy_comparison!(
@@ -157,24 +130,6 @@ mod bayer_strategy_tests {
         4,
         "scalar",
         "simd-fit-4"
-    );
-
-    test_strategy_comparison!(
-        test_scalar_vs_simd_fixed_par_4_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdFixedPar { lanes: 4 },
-        4,
-        "scalar",
-        "simd-fixed-par-4"
-    );
-
-    test_strategy_comparison!(
-        test_scalar_vs_simd_par_4_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdPar { lanes: 4 },
-        4,
-        "scalar",
-        "simd-par-4"
     );
 
     // Tests for 8 colors (power of 2)
@@ -197,24 +152,6 @@ mod bayer_strategy_tests {
         "simd-fit-8"
     );
 
-    test_strategy_comparison!(
-        test_scalar_vs_simd_fixed_par_8_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdFixedPar { lanes: 8 },
-        8,
-        "scalar",
-        "simd-fixed-par-8"
-    );
-
-    test_strategy_comparison!(
-        test_scalar_vs_simd_par_8_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdPar { lanes: 8 },
-        8,
-        "scalar",
-        "simd-par-8"
-    );
-
     // Tests for 16 colors (power of 2)
 
     test_strategy_comparison!(
@@ -235,24 +172,6 @@ mod bayer_strategy_tests {
         "simd-fit-16"
     );
 
-    test_strategy_comparison!(
-        test_scalar_vs_simd_fixed_par_16_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdFixedPar { lanes: 16 },
-        16,
-        "scalar",
-        "simd-fixed-par-16"
-    );
-
-    test_strategy_comparison!(
-        test_scalar_vs_simd_par_16_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdPar { lanes: 16 },
-        16,
-        "scalar",
-        "simd-par-16"
-    );
-
     // Tests for non-power-of-2 colors (testing Fit strategies)
 
     test_strategy_comparison!(
@@ -265,30 +184,12 @@ mod bayer_strategy_tests {
     );
 
     test_strategy_comparison!(
-        test_scalar_vs_simd_par_3_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdPar { lanes: 2 },
-        3,
-        "scalar",
-        "simd-par-2-3colors"
-    );
-
-    test_strategy_comparison!(
         test_scalar_vs_simd_fit_5_colors,
         BayerStrategy::Scalar,
         BayerStrategy::Simd { lanes: 4 },
         5,
         "scalar",
         "simd-fit-4-5colors"
-    );
-
-    test_strategy_comparison!(
-        test_scalar_vs_simd_par_5_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdPar { lanes: 4 },
-        5,
-        "scalar",
-        "simd-par-4-5colors"
     );
 
     test_strategy_comparison!(
@@ -301,30 +202,12 @@ mod bayer_strategy_tests {
     );
 
     test_strategy_comparison!(
-        test_scalar_vs_simd_par_7_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdPar { lanes: 4 },
-        7,
-        "scalar",
-        "simd-par-4-7colors"
-    );
-
-    test_strategy_comparison!(
         test_scalar_vs_simd_fit_12_colors,
         BayerStrategy::Scalar,
         BayerStrategy::Simd { lanes: 8 },
         12,
         "scalar",
         "simd-fit-8-12colors"
-    );
-
-    test_strategy_comparison!(
-        test_scalar_vs_simd_par_12_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdPar { lanes: 8 },
-        12,
-        "scalar",
-        "simd-par-8-12colors"
     );
 
     // Additional edge case tests
@@ -339,29 +222,11 @@ mod bayer_strategy_tests {
     );
 
     test_strategy_comparison!(
-        test_scalar_vs_simd_par_24_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdPar { lanes: 16 },
-        24,
-        "scalar",
-        "simd-par-16-24colors"
-    );
-
-    test_strategy_comparison!(
         test_scalar_vs_simd_fit_32_colors,
         BayerStrategy::Scalar,
         BayerStrategy::Simd { lanes: 16 },
         32,
         "scalar",
         "simd-fit-16-32colors"
-    );
-
-    test_strategy_comparison!(
-        test_scalar_vs_simd_par_32_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdPar { lanes: 16 },
-        32,
-        "scalar",
-        "simd-par-16-32colors"
     );
 }

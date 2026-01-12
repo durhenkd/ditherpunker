@@ -23,8 +23,6 @@ fn criterion_benchmark(c: &mut Criterion) {
     benchmark_by_param!(fixed_lanes, |lanes| BayerStrategy::SimdFixed { lanes });
     benchmark_by_param!(fixed_lanes, |lanes| BayerStrategy::Simd { lanes });
 
-    BayerStrategy::Scalar.to_string();
-
     group.finish();
 }
 

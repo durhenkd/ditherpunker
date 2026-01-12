@@ -3,7 +3,8 @@ pub mod image;
 pub mod iterator;
 pub(crate) mod num;
 pub mod pixel;
+pub(crate) mod transform;
 
-// pub mod prelude {
-//     //
-// }
+pub mod prelude {
+    pub use super::pixel::RGB;
+}

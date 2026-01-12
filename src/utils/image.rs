@@ -1,5 +1,5 @@
 use crate::{
-    texture::{TextureOps, TextureRef},
+    texture::{TextureRef, TextureSlice},
     utils::pixel::RGB,
 };
 use image::{
@@ -58,7 +58,7 @@ pub fn rgb_to_dynimg(rgbs: &[RGB], width: u32, height: u32) -> DynamicImage {
 /// From a TextureRef construct an ImageBuffer without copying
 /// and write to file using png encoder.
 pub(crate) fn write_png_texture<Pixel, T>(
-    texture: TextureRef<'_, T>,
+    texture: TextureSlice<'_, T>,
     path: &Path,
     compression: CompressionType,
     filtering: FilterType,
