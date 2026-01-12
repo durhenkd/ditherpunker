@@ -1,13 +1,18 @@
-pub mod threshold_transform;
 pub mod matrices;
 mod multi_impl;
+pub mod threshold_transform;
 
 use crate::{
     color_palette::ColorMapElement,
-    dithering::threshold::matrices::{BAYER0, BAYER1, BAYER2, BAYER3 /*BLUE_NOISE*/},
+    dithering::threshold::{
+        matrices::{BAYER0, BAYER1, BAYER2, BAYER3 /*BLUE_NOISE*/},
+        threshold_transform::{ThresholdConfig, ThresholdImpl},
+    },
+    prelude::TextureTransform,
+    texture::{TextureMutSlice, TextureSlice},
     utils::pixel::RGB,
 };
-use rand::Rng;
+use rayon::{iter::ParallelIterator, slice::ParallelSlice};
 
 #[derive(Debug, Clone, Copy)]
 pub enum ThresholdType {
@@ -20,41 +25,38 @@ pub enum ThresholdType {
 }
 
 impl ThresholdType {
-    pub fn dither(self, data: &mut [RGB], width: u32, _height: u32, color_map: &[ColorMapElement]) {
-        let mut index = 0;
-        while index < data.len() {
-            data[index] = self.dither_helper(
-                data[index].grayscale(),
-                color_map,
-                index % width as usize,
-                index / width as usize,
-            );
+    /// Quickly dither 1 thing. Prefer using [ThresholdType::to_transform] for other purposes.
+    pub fn dither(self, data: &mut [RGB], width: u32, height: u32, color_map: &[ColorMapElement]) {
+        let mut transform = self.to_transform(color_map.to_vec());
 
-            index += 1;
-        }
+        let grayscale: Vec<f32> = data
+            .par_chunks(width as usize)
+            .map(|row| row.iter().map(|pixel| pixel.grayscale()))
+            .flatten_iter()
+            .collect();
+
+        let input = TextureSlice::new(width, height, grayscale.as_slice());
+        let output = TextureMutSlice::new(width, height, data);
+
+        transform.apply(input, output);
     }
 
-    fn dither_helper(self, value: f32, color_map: &[ColorMapElement], x: usize, y: usize) -> RGB {
-        let mut index = 0;
-        while index < color_map.len() {
-            if value < self.get_threshold(x, y) * color_map[index].scale + color_map[index].offset {
-                return color_map[index].color;
-            }
-            index += 1;
-        }
-
-        color_map.last().unwrap().color
+    pub fn to_transform(
+        &self,
+        color_map: Vec<ColorMapElement>,
+    ) -> impl TextureTransform<Input = f32, Output = RGB> {
+        let config = self.to_transform_config(color_map);
+        ThresholdImpl::auto(&config).build(config)
     }
 
-    fn get_threshold(self, x: usize, y: usize) -> f32 {
+    fn to_transform_config(&self, color_map: Vec<ColorMapElement>) -> ThresholdConfig {
         match self {
-            ThresholdType::Rand => rand::rng().random::<f32>(),
-            ThresholdType::Bayer0 => 1.0 - BAYER0[y % 2 * 2 + x % 2],
-            ThresholdType::Bayer1 => 1.0 - BAYER1[y % 4 * 4 + x % 4],
-            ThresholdType::Bayer2 => 1.0 - BAYER2[y % 8 * 8 + x % 8],
-            ThresholdType::Bayer3 => 1.0 - BAYER3[y % 16 * 16 + x % 16],
-            ThresholdType::BlueNoise => todo!("adjust precision"),
-            // ThresholdType::BlueNoise => BLUE_NOISE[y % 128 * 128 + x % 128],
+            ThresholdType::Rand => unimplemented!("requires pre-processing"),
+            ThresholdType::Bayer0 => ThresholdConfig::new(1, BAYER0.to_vec(), color_map),
+            ThresholdType::Bayer1 => ThresholdConfig::new(2, BAYER1.to_vec(), color_map),
+            ThresholdType::Bayer2 => ThresholdConfig::new(3, BAYER2.to_vec(), color_map),
+            ThresholdType::Bayer3 => ThresholdConfig::new(3, BAYER3.to_vec(), color_map),
+            ThresholdType::BlueNoise => unimplemented!("generate blue noise"),
         }
     }
 }
