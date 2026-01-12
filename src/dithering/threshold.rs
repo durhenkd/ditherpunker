@@ -1,4 +1,4 @@
-pub mod bayer_transform;
+pub mod threshold_transform;
 pub mod matrices;
 mod multi_impl;
 
@@ -56,44 +56,5 @@ impl ThresholdType {
             ThresholdType::BlueNoise => todo!("adjust precision"),
             // ThresholdType::BlueNoise => BLUE_NOISE[y % 128 * 128 + x % 128],
         }
-    }
-
-    pub fn dither_bench(
-        self,
-        grayscale_data: &[f32],
-        output: &mut [crate::utils::pixel::RGB],
-        width: usize,
-        _height: usize,
-        color_map: &[crate::color_palette::ColorMapElement],
-    ) {
-        let mut index = 0;
-        while index < grayscale_data.len() {
-            output[index] = self.dither_helper_bench(
-                grayscale_data[index],
-                color_map,
-                index % width,
-                index / width,
-            );
-
-            index += 1;
-        }
-    }
-
-    fn dither_helper_bench(
-        self,
-        value: f32,
-        color_map: &[crate::color_palette::ColorMapElement],
-        x: usize,
-        y: usize,
-    ) -> RGB {
-        let mut index = 0;
-        while index < color_map.len() {
-            if value < self.get_threshold(x, y) * color_map[index].scale + color_map[index].offset {
-                return color_map[index].color;
-            }
-            index += 1;
-        }
-
-        color_map.last().unwrap().color
     }
 }

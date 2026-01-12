@@ -1,5 +1,5 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
-use ditherpunker::dithering::threshold::bayer_transform::BayerStrategy;
+use ditherpunker::dithering::threshold::threshold_transform::ThresholdImpl;
 
 pub(crate) mod bayer_transform_utils;
 use bayer_transform_utils::*;
@@ -12,16 +12,16 @@ fn criterion_benchmark(c: &mut Criterion) {
             for colors in $colors {
                 let cfg = config(colors);
                 let strategy = $strategy(colors);
-                let id = BenchmarkId::new(strategy.name(), cfg.colors_len());
+                let id = BenchmarkId::new(strategy.name(), cfg.map_size());
                 benchmark_strategy(&mut group, id, cfg, $strategy(colors), BENCH_IMAGE_SIZE);
             }
         };
     }
 
     let fixed_lanes = [2, 4, 8, 16];
-    benchmark_by_param!(fixed_lanes, |_| BayerStrategy::Scalar);
-    benchmark_by_param!(fixed_lanes, |lanes| BayerStrategy::SimdFixed { lanes });
-    benchmark_by_param!(fixed_lanes, |lanes| BayerStrategy::Simd { lanes });
+    benchmark_by_param!(fixed_lanes, |_| ThresholdImpl::Scalar);
+    benchmark_by_param!(fixed_lanes, |lanes| ThresholdImpl::SimdFixed { lanes });
+    benchmark_by_param!(fixed_lanes, |lanes| ThresholdImpl::Simd { lanes });
 
     group.finish();
 }

@@ -4,7 +4,7 @@ mod bayer_strategy_tests {
 
     use crate::{
         dithering::threshold::{
-            bayer_transform::{BayerConfig, BayerStrategy},
+            threshold_transform::{ThresholdConfig, ThresholdImpl},
             matrices,
         },
         tests::utils::*,
@@ -28,13 +28,13 @@ mod bayer_strategy_tests {
     }
 
     /// Create a config with specified color count
-    fn create_config(colors: usize) -> BayerConfig {
+    fn create_config(colors: usize) -> ThresholdConfig {
         let color_map = if colors == 2 {
             default_color_map()
         } else {
             random_color_map(colors)
         };
-        BayerConfig::new(1, matrices::BAYER0.to_vec(), color_map)
+        ThresholdConfig::new(1, matrices::BAYER0.to_vec(), color_map)
     }
 
     /// Assert that two images match pixel by pixel
@@ -58,8 +58,8 @@ mod bayer_strategy_tests {
 
     /// Apply a strategy to the given input/output textures
     fn apply_strategy(
-        strategy: BayerStrategy,
-        config: BayerConfig,
+        strategy: ThresholdImpl,
+        config: ThresholdConfig,
         input: &Texture<f32>,
         output: &mut Texture<RGB>,
     ) {
@@ -96,8 +96,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fixed_2_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdFixed { lanes: 2 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::SimdFixed { lanes: 2 },
         2,
         "scalar",
         "simd-fixed-2"
@@ -105,8 +105,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fit_2_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::Simd { lanes: 2 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::Simd { lanes: 2 },
         2,
         "scalar",
         "simd-fit-2"
@@ -116,8 +116,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fixed_4_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdFixed { lanes: 4 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::SimdFixed { lanes: 4 },
         4,
         "scalar",
         "simd-fixed-4"
@@ -125,8 +125,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fit_4_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::Simd { lanes: 4 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::Simd { lanes: 4 },
         4,
         "scalar",
         "simd-fit-4"
@@ -136,8 +136,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fixed_8_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdFixed { lanes: 8 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::SimdFixed { lanes: 8 },
         8,
         "scalar",
         "simd-fixed-8"
@@ -145,8 +145,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fit_8_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::Simd { lanes: 8 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::Simd { lanes: 8 },
         8,
         "scalar",
         "simd-fit-8"
@@ -156,8 +156,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fixed_16_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::SimdFixed { lanes: 16 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::SimdFixed { lanes: 16 },
         16,
         "scalar",
         "simd-fixed-16"
@@ -165,8 +165,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fit_16_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::Simd { lanes: 16 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::Simd { lanes: 16 },
         16,
         "scalar",
         "simd-fit-16"
@@ -176,8 +176,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fit_3_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::Simd { lanes: 2 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::Simd { lanes: 2 },
         3,
         "scalar",
         "simd-fit-2-3colors"
@@ -185,8 +185,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fit_5_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::Simd { lanes: 4 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::Simd { lanes: 4 },
         5,
         "scalar",
         "simd-fit-4-5colors"
@@ -194,8 +194,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fit_7_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::Simd { lanes: 4 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::Simd { lanes: 4 },
         7,
         "scalar",
         "simd-fit-4-7colors"
@@ -203,8 +203,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fit_12_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::Simd { lanes: 8 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::Simd { lanes: 8 },
         12,
         "scalar",
         "simd-fit-8-12colors"
@@ -214,8 +214,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fit_24_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::Simd { lanes: 16 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::Simd { lanes: 16 },
         24,
         "scalar",
         "simd-fit-16-24colors"
@@ -223,8 +223,8 @@ mod bayer_strategy_tests {
 
     test_strategy_comparison!(
         test_scalar_vs_simd_fit_32_colors,
-        BayerStrategy::Scalar,
-        BayerStrategy::Simd { lanes: 16 },
+        ThresholdImpl::Scalar,
+        ThresholdImpl::Simd { lanes: 16 },
         32,
         "scalar",
         "simd-fit-16-32colors"

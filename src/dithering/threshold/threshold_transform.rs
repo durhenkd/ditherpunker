@@ -1,10 +1,6 @@
-use std::{fmt::Display, simd::cmp::SimdPartialOrd};
+use std::fmt::Display;
 
 use itertools::Itertools;
-use rayon::{
-    iter::{IndexedParallelIterator, ParallelIterator},
-    slice::ParallelSliceMut,
-};
 
 use crate::{
     color_palette,
@@ -14,19 +10,17 @@ use crate::{
     utils::{self, transform::precompute_tiled_rows},
 };
 
-// pub type BayerArgs<'a> = TextureIO<'a, f32, utils::pixel::RGB>;
-
-/// Configuration for Bayer transforms, shared for all
+/// Configuration for threshold transforms, shared for all
 /// transform passes.
 #[derive(Debug, Clone)]
-pub struct BayerConfig {
+pub struct ThresholdConfig {
     /// bayer matrix data
     pub(crate) matrix: Vec<f32>,
     /// color map used for transform
     pub(crate) map: Vec<color_palette::ColorMapElement>,
-    /// bayer matrix order.
+    /// matrix order.
     ///
-    /// > bayer matrix M2 (2x2) is order 1.
+    /// > matrix M2 (2x2) is order 1.
     /// > (alias for "first matrix")
     /// >
     /// > coincidently M4 (4x4) is order 2.
@@ -45,13 +39,13 @@ pub struct BayerConfig {
     pub(crate) side_mask: usize,
 }
 
-impl BayerConfig {
+impl ThresholdConfig {
     pub fn new(order: usize, matrix: Vec<f32>, map: Vec<color_palette::ColorMapElement>) -> Self {
         // matrix side size (i.e. sqrt(matrix.len()))
         let side_size = 1_usize << order;
         assert!(
             side_size * side_size == matrix.len(),
-            "bayer order does not match matrix buffer length"
+            "matrix order does not match matrix buffer length"
         );
 
         let side_mask = side_size - 1;
@@ -63,32 +57,27 @@ impl BayerConfig {
         }
     }
 
-    /// Equivalent to 1.0 - bayer_value
-    pub fn cache_bayer_complement(&self) -> Vec<f32> {
-        self.matrix.iter().map(|v| 1.0 - *v).collect()
-    }
-
-    /// Pre-compute bayer complement as row patterns for the given image width.
+    /// Pre-compute matrix complement as row patterns for the given image width.
     fn cache_tiled_pattern(&mut self, width: usize) -> Vec<f32> {
         precompute_tiled_rows(1 << self.order, width, |x, y, _| {
-            1.0 - self.matrix[self.bayer_idx(x, y)]
+            1.0 - self.matrix[self.matrix_idx(x, y)]
         })
     }
 
-    /// Get the idx in the bayer matrix corresponding to a pixel coordinate
+    /// Get the 1D idx of the 2D matrix
     #[inline(always)]
-    pub fn bayer_idx(&self, x: usize, y: usize) -> usize {
+    pub fn matrix_idx(&self, x: usize, y: usize) -> usize {
         ((y & self.side_mask) << self.order) + (x & self.side_mask)
     }
 
-    pub fn colors_len(&self) -> usize {
+    pub fn map_size(&self) -> usize {
         self.map.len()
     }
 }
 
-/// Strategy enum for selecting Bayer transform implementation
+/// Strategy enum for selecting ThresholdTransform implementation
 #[derive(Debug, Clone, Copy)]
-pub enum BayerStrategy {
+pub enum ThresholdImpl {
     /// Simple scalar implementation
     Scalar,
     /// SIMD with dynamic fitting (can handle any color_map size)
@@ -97,19 +86,19 @@ pub enum BayerStrategy {
     SimdFixed { lanes: usize },
 }
 
-impl Display for BayerStrategy {
+impl Display for ThresholdImpl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            BayerStrategy::Scalar => write!(f, "scalar"),
-            BayerStrategy::Simd { lanes } => write!(f, "simd{}", lanes),
-            BayerStrategy::SimdFixed { lanes } => write!(f, "simd-fixed{}", lanes),
+            ThresholdImpl::Scalar => write!(f, "scalar"),
+            ThresholdImpl::Simd { lanes } => write!(f, "simd{}", lanes),
+            ThresholdImpl::SimdFixed { lanes } => write!(f, "simd-fixed{}", lanes),
         }
     }
 }
 
-impl BayerStrategy {
+impl ThresholdImpl {
     /// Detect best-fit strategy
-    pub fn auto(config: &BayerConfig) -> Self {
+    pub fn auto(config: &ThresholdConfig) -> Self {
         // required width to process one thing
         let size_hint: usize = config.map.len();
         if size_hint < 2 {
@@ -121,7 +110,7 @@ impl BayerStrategy {
             .suggested_simd_width::<f32>()
             .unwrap_or(0);
 
-        // TODO add other targets in multi_impl and match against them here too
+        // add other targets in multi_impl and match against them here too
         if is_x86_feature_detected!("avx512f") {
             lane_hint = 16;
         } else if is_x86_feature_detected!("avx2") {
@@ -134,7 +123,7 @@ impl BayerStrategy {
             return Self::SimdFixed { lanes: lane_hint };
         }
 
-        let lanes = BayerStrategy::lanes_fit(size_hint);
+        let lanes = ThresholdImpl::simd_fit(size_hint);
         if lanes < 2 || lanes > 16 {
             return Self::Scalar;
         }
@@ -147,9 +136,9 @@ impl BayerStrategy {
     /// for optimal performance while hiding implementation details
     pub fn build(
         self,
-        config: BayerConfig,
+        config: ThresholdConfig,
     ) -> impl TextureTransform<Input = f32, Output = utils::pixel::RGB> {
-        type I = BayerTransformImpl;
+        type I = ThresholdTransformImpl;
         match self {
             // scalar impls
             Self::Scalar => I::Scalar(Scalar::new(config)),
@@ -163,13 +152,13 @@ impl BayerStrategy {
             Self::SimdFixed { lanes: 4 } => I::SimdFixed4(SimdFixed::<4>::new(config)),
             Self::SimdFixed { lanes: 8 } => I::SimdFixed8(SimdFixed::<8>::new(config)),
             Self::SimdFixed { lanes: 16 } => I::SimdFixed16(SimdFixed::<16>::new(config)),
-            strategy => panic!("Unsupported lane configuration {}", strategy),
+            strategy => panic!("Unsupported lane configuration {:?}", strategy),
         }
     }
 
     /// Compute the best-fit amount of lanes to use for
     /// SIMD fit strategy.
-    pub fn lanes_fit(lane_hint: usize) -> usize {
+    pub fn simd_fit(lane_hint: usize) -> usize {
         // minimize dummy data used for simd ops
         let mut lanes = utils::num::closest_pow_2(lane_hint);
         // ensure chosen_size fits in the suggested width
@@ -183,18 +172,18 @@ impl BayerStrategy {
     /// such as simd lanes used.
     pub fn name(&self) -> &'static str {
         match self {
-            BayerStrategy::Scalar => "scalar",
-            BayerStrategy::Simd { .. } => "simd",
-            BayerStrategy::SimdFixed { .. } => "simd-fixed",
+            ThresholdImpl::Scalar => "scalar",
+            ThresholdImpl::Simd { .. } => "simd",
+            ThresholdImpl::SimdFixed { .. } => "simd-fixed",
         }
     }
 }
 
-/// Internal enum that wraps all possible transform implementations
+/// Internal enum that wraps all possible transform implementations.
 ///
 /// This is returned as `impl Transform`, so the concrete type is hidden
-/// while still allowing full monomorphization
-enum BayerTransformImpl {
+/// while still allowing full monomorphization.
+enum ThresholdTransformImpl {
     Scalar(Scalar),
     Simd2(SimdFit<2>),
     Simd4(SimdFit<4>),
@@ -206,7 +195,7 @@ enum BayerTransformImpl {
     SimdFixed16(SimdFixed<16>),
 }
 
-impl TextureTransform for BayerTransformImpl {
+impl TextureTransform for ThresholdTransformImpl {
     type Input = f32;
     type Output = utils::pixel::RGB;
 
@@ -231,7 +220,11 @@ impl TextureTransform for BayerTransformImpl {
         }
     }
 
-    fn prepare(&mut self, in_shape: crate::texture::TextureShape, out_shape: crate::texture::TextureShape) {
+    fn prepare(
+        &mut self,
+        in_shape: crate::texture::TextureShape,
+        out_shape: crate::texture::TextureShape,
+    ) {
         match self {
             Self::Scalar(t) => t.prepare(in_shape, out_shape),
             Self::Simd2(t) => t.prepare(in_shape, out_shape),
@@ -248,17 +241,17 @@ impl TextureTransform for BayerTransformImpl {
 
 // Concrete Transform Implementations
 
-/// Simple non-vectorized bayer dithering transform
+/// Simple non-vectorized
 struct Scalar {
-    config: BayerConfig,
-    bayer: Vec<f32>,
+    config: ThresholdConfig,
+    tiled: Vec<f32>,
 }
 
 impl Scalar {
-    fn new(config: BayerConfig) -> Self {
+    fn new(config: ThresholdConfig) -> Self {
         Self {
             config,
-            bayer: Vec::new(),
+            tiled: Vec::new(),
         }
     }
 }
@@ -279,7 +272,7 @@ impl TextureTransform for Scalar {
             input.as_ref(),
             input.shape(),
             output.as_mut(),
-            self.bayer.as_slice(),
+            self.tiled.as_slice(),
             &self.config,
         );
 
@@ -292,11 +285,11 @@ impl TextureTransform for Scalar {
         out_shape: crate::texture::TextureShape,
     ) {
         debug_assert_eq!(in_shape, out_shape);
-        self.bayer = self.config.cache_tiled_pattern(in_shape.0);
+        self.tiled = self.config.cache_tiled_pattern(in_shape.0);
     }
 }
 
-/// Constrained SIMD accelerated bayer dithering transform.
+/// Constrained SIMD accelerated.
 ///
 /// This method computes the threshold for one pixel against all colors in
 /// the color map.
@@ -307,20 +300,18 @@ struct SimdFixed<const SIMD_LANES: usize>
 where
     std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
 {
-    config: BayerConfig,
+    config: ThresholdConfig,
+    tiled: Vec<f32>,
     // Precomputed SIMD data
     scale: std::simd::Simd<f32, SIMD_LANES>,
     offset: std::simd::Simd<f32, SIMD_LANES>,
-    /// Pre-computed bayer rows for cache-friendly sequential access.
-    /// Each row contains the full-width bayer-complement pattern
-    bayer: Vec<f32>,
 }
 
 impl<const SIMD_LANES: usize> SimdFixed<SIMD_LANES>
 where
     std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
 {
-    fn new(config: BayerConfig) -> Self {
+    fn new(config: ThresholdConfig) -> Self {
         assert_eq!(
             config.map.len(),
             SIMD_LANES,
@@ -342,7 +333,7 @@ where
             config,
             scale,
             offset,
-            bayer: Vec::new(),
+            tiled: Vec::new(),
         }
     }
 }
@@ -366,7 +357,7 @@ where
             input.as_ref(),
             input.shape(),
             output.as_mut(),
-            &self.bayer,
+            &self.tiled,
             &self.config,
             self.scale,
             self.offset,
@@ -381,7 +372,7 @@ where
         out_shape: crate::texture::TextureShape,
     ) {
         debug_assert_eq!(in_shape, out_shape);
-        self.bayer = self.config.cache_tiled_pattern(in_shape.0);
+        self.tiled = self.config.cache_tiled_pattern(in_shape.0);
     }
 }
 
@@ -644,7 +635,7 @@ where
 //     }
 // }
 
-/// Flexible SIMD accelerated bayer dithering transform.
+/// Flexible SIMD accelerated.
 ///
 /// This method computes the threshold for one pixel against all colors in
 /// the color map iteratively, until finished.
@@ -655,14 +646,12 @@ struct SimdFit<const SIMD_LANES: usize>
 where
     std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
 {
-    config: BayerConfig,
+    config: ThresholdConfig,
+    tiled: Vec<f32>,
     // Precomputed data for fitting arbitrary color map sizes
     simd: Vec<SimdFitPassData<SIMD_LANES>>,
     // iterations required per pixel to finish computing a pixel
     compute_iters: usize,
-    /// Precomputed bayer matrix where each value is the complement
-    /// of the original.
-    bayer: Vec<f32>,
 }
 
 /// Cached data for one pixel compute pass
@@ -680,7 +669,7 @@ impl<const SIMD_LANES: usize> SimdFit<SIMD_LANES>
 where
     std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
 {
-    fn new(config: BayerConfig) -> Self {
+    fn new(config: ThresholdConfig) -> Self {
         // (color_map.len() + SIMD_LANES - 1) / SIMD_LANES
         let compute_iters = config.map.len().div_ceil(SIMD_LANES);
         // SAFETY: compute_data is immediately initialized
@@ -725,7 +714,7 @@ where
             config,
             compute_iters,
             simd: compute_data,
-            bayer: Vec::new(),
+            tiled: Vec::new(),
         }
     }
 }
@@ -749,7 +738,7 @@ where
             input.as_ref(),
             input.shape(),
             output.as_mut(),
-            &self.bayer,
+            &self.tiled,
             &self.config,
             &self.simd,
             self.compute_iters,
@@ -764,6 +753,6 @@ where
         out_shape: crate::texture::TextureShape,
     ) {
         debug_assert_eq!(in_shape, out_shape);
-        self.bayer = self.config.cache_tiled_pattern(in_shape.0);
+        self.tiled = self.config.cache_tiled_pattern(in_shape.0);
     }
 }

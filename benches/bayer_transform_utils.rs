@@ -4,7 +4,7 @@ use criterion::{BenchmarkGroup, BenchmarkId, measurement::WallTime};
 use ditherpunker::{
     color_palette::ColorMapElement,
     dithering::threshold::{
-        bayer_transform::{BayerConfig, BayerStrategy},
+        threshold_transform::{ThresholdConfig, ThresholdImpl},
         matrices,
     },
     texture::{Texture, TextureRef},
@@ -17,8 +17,8 @@ use rand::Rng;
 pub const BENCH_IMAGE_SIZE: u32 = 300;
 
 /// Default config for bayer transform benchmarks
-pub fn config(colors: usize) -> BayerConfig {
-    std::hint::black_box(BayerConfig::new(
+pub fn config(colors: usize) -> ThresholdConfig {
+    std::hint::black_box(ThresholdConfig::new(
         1,
         matrices::BAYER0.to_vec(),
         color_map_preset(colors),
@@ -46,8 +46,8 @@ pub fn data(size: u32) -> (Texture<f32>, Texture<ditherpunker::utils::pixel::RGB
 pub fn benchmark_strategy(
     group: &mut BenchmarkGroup<'_, WallTime>,
     id: BenchmarkId,
-    config: BayerConfig,
-    strategy: BayerStrategy,
+    config: ThresholdConfig,
+    strategy: ThresholdImpl,
     size: u32,
 ) {
     let (input, mut output) = std::hint::black_box(data(size));
