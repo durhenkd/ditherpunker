@@ -140,3 +140,155 @@ fn scalar_par_impl(in_buf: &[u8], out_buf: &mut [f32], shape: Shape) {
                 });
         });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{SRGB_LUMA_F32, scalar_impl, scalar_par_impl};
+
+    #[test]
+    fn test_scalar_impl_rgb() {
+        // Test with RGB (3 planes)
+        let in_buf = vec![
+            255, 0, 0, // Red pixel
+            0, 255, 0, // Green pixel
+            0, 0, 255, // Blue pixel
+            128, 128, 128, // Gray pixel
+        ];
+        let mut out_buf = vec![0.0; 4];
+
+        scalar_impl(&in_buf, &mut out_buf, 3);
+
+        // Expected values based on SRGB_LUMA_F32 weights
+        let expected = [
+            SRGB_LUMA_F32[0], // Red
+            SRGB_LUMA_F32[1], // Green
+            SRGB_LUMA_F32[2], // Blue
+            (128.0 * SRGB_LUMA_F32[0] + 128.0 * SRGB_LUMA_F32[1] + 128.0 * SRGB_LUMA_F32[2])
+                / 255.0, // Gray
+        ];
+
+        for (i, (&result, &expected)) in out_buf.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (result - expected).abs() < 1e-6,
+                "Pixel {} mismatch: got {}, expected {}",
+                i,
+                result,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_scalar_impl_rgba() {
+        // Test with RGBA (4 planes) - alpha should be ignored
+        let in_buf = vec![
+            255, 0, 0, 255, // Red pixel with full alpha
+            0, 255, 0, 128, // Green pixel with half alpha
+            0, 0, 255, 0, // Blue pixel with zero alpha
+        ];
+        let mut out_buf = vec![0.0; 3];
+
+        scalar_impl(&in_buf, &mut out_buf, 4);
+
+        // Alpha should not affect the grayscale calculation
+        let expected = [
+            SRGB_LUMA_F32[0], // Red
+            SRGB_LUMA_F32[1], // Green
+            SRGB_LUMA_F32[2], // Blue
+        ];
+
+        for (i, (&result, &expected)) in out_buf.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (result - expected).abs() < 1e-6,
+                "Pixel {} mismatch: got {}, expected {}",
+                i,
+                result,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_scalar_par_impl_rgb() {
+        // Test with RGB (3 planes) in parallel mode
+        let in_buf = vec![
+            255, 0, 0, 0, 255, 0, // Row 1: Red, Green
+            0, 0, 255, 128, 128, 128, // Row 2: Blue, Gray
+        ];
+        let mut out_buf = vec![0.0; 4];
+
+        scalar_par_impl(&in_buf, &mut out_buf, (2, 2, 3));
+
+        let expected = [
+            SRGB_LUMA_F32[0], // Red
+            SRGB_LUMA_F32[1], // Green
+            SRGB_LUMA_F32[2], // Blue
+            (128.0 * SRGB_LUMA_F32[0] + 128.0 * SRGB_LUMA_F32[1] + 128.0 * SRGB_LUMA_F32[2])
+                / 255.0, // Gray
+        ];
+
+        for (i, (&result, &expected)) in out_buf.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (result - expected).abs() < 1e-6,
+                "Pixel {} mismatch: got {}, expected {}",
+                i,
+                result,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_scalar_par_impl_rgba() {
+        // Test with RGBA (4 planes) in parallel mode
+        let in_buf = vec![
+            255, 0, 0, 255, 0, 255, 0, 128, // Row 1: Red, Green
+            0, 0, 255, 0, 64, 64, 64, 255, // Row 2: Blue, Dark gray
+        ];
+        let mut out_buf = vec![0.0; 4];
+
+        scalar_par_impl(&in_buf, &mut out_buf, (2, 2, 4));
+
+        let expected = [
+            SRGB_LUMA_F32[0], // Red
+            SRGB_LUMA_F32[1], // Green
+            SRGB_LUMA_F32[2], // Blue
+            (64.0 * SRGB_LUMA_F32[0] + 64.0 * SRGB_LUMA_F32[1] + 64.0 * SRGB_LUMA_F32[2]) / 255.0, // Dark gray
+        ];
+
+        for (i, (&result, &expected)) in out_buf.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (result - expected).abs() < 1e-6,
+                "Pixel {} mismatch: got {}, expected {}",
+                i,
+                result,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_scalar_impl_vs_scalar_par_impl() {
+        // Verify both implementations produce identical results
+        let in_buf = vec![
+            255, 128, 64, 192, 96, 48, // Row 1
+            32, 160, 224, 80, 176, 112, // Row 2
+            144, 208, 16, 240, 120, 200, // Row 3
+        ];
+        let mut out_buf_seq = vec![0.0; 6];
+        let mut out_buf_par = vec![0.0; 6];
+
+        scalar_impl(&in_buf, &mut out_buf_seq, 3);
+        scalar_par_impl(&in_buf, &mut out_buf_par, (2, 3, 3));
+
+        for (i, (&seq, &par)) in out_buf_seq.iter().zip(out_buf_par.iter()).enumerate() {
+            assert!(
+                (seq - par).abs() < 1e-6,
+                "Pixel {} mismatch between seq and par: seq={}, par={}",
+                i,
+                seq,
+                par
+            );
+        }
+    }
+}
