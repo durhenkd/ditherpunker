@@ -1,11 +1,6 @@
-use std::simd::cmp::SimdPartialOrd;
-
-use itertools::Itertools;
-
 use crate::{
     color_palette::ColorMapElement,
     dithering::{error_diffusion::ErrorDiffusionType, threshold::ThresholdType},
-    utils::buffer::uninitialized_buffer,
     utils::pixel::RGB,
 };
 

@@ -13,7 +13,6 @@ pub mod texture;
 pub mod transform;
 pub mod utils;
 
-mod benches;
 mod tests;
 
 pub fn run(

@@ -22,7 +22,26 @@ where
 }
 
 #[cfg(test)]
-mod transform_utils {
+mod tests {
+    use super::precompute_tiled_rows;
+
+    #[test]
+    fn test_precompute_tiled_rows_simple() {
+        let buf = precompute_tiled_rows(5, 10, |x, y, idx| (x, y, idx));
+        assert_eq!(buf.len(), 5 * 10);
+
+        let mut idx = 0;
+        for y in 0..5 {
+            for x in 0..10 {
+                assert_eq!(buf[idx], (x, y, idx));
+                idx += 1;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod benches {
     use super::*;
 
     extern crate test;
