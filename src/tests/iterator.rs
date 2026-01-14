@@ -1,3 +1,6 @@
+/// Tests the Seq and Par index iterators work.
+///
+/// This concept is not useful, might delete later.
 #[cfg(test)]
 mod iterator_tests {
     use std::sync::Mutex;

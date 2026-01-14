@@ -1,3 +1,4 @@
+/// Tests output equivalence between all bayer transform strategies against the scalar version.
 #[cfg(test)]
 mod bayer_strategy_tests {
     use itertools::Itertools;
