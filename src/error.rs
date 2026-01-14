@@ -11,6 +11,9 @@ pub enum DitherpunkerError {
 
     /// Error occurred during I/O operations (file read/write)
     Io(std::io::Error),
+
+    /// Anonymous error
+    String(String),
 }
 
 impl fmt::Display for DitherpunkerError {
@@ -19,6 +22,7 @@ impl fmt::Display for DitherpunkerError {
             DitherpunkerError::ImageDecode(e) => write!(f, "Image decode error: {}", e),
             DitherpunkerError::ImageEncode(e) => write!(f, "Image encode error: {}", e),
             DitherpunkerError::Io(e) => write!(f, "I/O error: {}", e),
+            DitherpunkerError::String(s) => write!(f, "{}", s),
         }
     }
 }
@@ -28,6 +32,7 @@ impl std::error::Error for DitherpunkerError {
         match self {
             DitherpunkerError::ImageDecode(e) | DitherpunkerError::ImageEncode(e) => Some(e),
             DitherpunkerError::Io(e) => Some(e),
+            DitherpunkerError::String(_) => None,
         }
     }
 }
