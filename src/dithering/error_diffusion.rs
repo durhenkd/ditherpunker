@@ -1,4 +1,4 @@
-use crate::{color_palette::ColorMapElement, pixel_util::RGB};
+use crate::{color_palette::ColorMapElement, utils::pixel::RGB};
 use matrices::{
     ATKINSON, ATKINSON_SIZE, FLOYD_STEINBERG, FLOYD_STEINBERG_SIZE, JARVIS_JUDICE_NINKE,
     JARVIS_JUDICE_NINKE_SIZE,
@@ -14,14 +14,8 @@ pub enum ErrorDiffusionType {
 }
 
 impl ErrorDiffusionType {
-    pub fn dither(
-        self,
-        data: &mut Vec<RGB>,
-        width: u32,
-        height: u32,
-        color_map: &Vec<ColorMapElement>,
-    ) {
-        let mut n_color_map = color_map.clone();
+    pub fn dither(self, data: &mut [RGB], width: u32, height: u32, color_map: &[ColorMapElement]) {
+        let mut n_color_map = color_map.to_owned();
         normalize_color_map(&mut n_color_map);
 
         match self {
@@ -53,12 +47,12 @@ impl ErrorDiffusionType {
     }
 
     fn dither_helper(
-        matrix: Vec<f64>,
+        matrix: Vec<f32>,
         matrix_dimenisons: [usize; 2],
-        data: &mut Vec<RGB>,
+        data: &mut [RGB],
         width: u32,
         _height: u32,
-        color_map: &Vec<ColorMapElement>,
+        color_map: &[ColorMapElement],
     ) {
         /*
         prepare utils and variables
@@ -69,12 +63,11 @@ impl ErrorDiffusionType {
         factor[origin] = 0.0;
 
         let mut index_data: usize = 0;
-        while index_data < data.len()  {
-
+        while index_data < data.len() {
             /*
             give the pixel a color and calculate the difference
             */
-            let error: f64 = discrete_and_calculate_error(&mut data[index_data], color_map);
+            let error: f32 = discrete_and_calculate_error(&mut data[index_data], color_map);
 
             /*
             distribute the difference to nearby pixels
@@ -98,7 +91,7 @@ impl ErrorDiffusionType {
     }
 }
 
-fn normalize_color_map(color_map: &mut Vec<ColorMapElement>) {
+fn normalize_color_map(color_map: &mut [ColorMapElement]) {
     let sum = color_map[1..]
         .iter()
         .map(|x| x.scale)
@@ -118,10 +111,10 @@ fn normalize_color_map(color_map: &mut Vec<ColorMapElement>) {
     color_map[0].scale = 0.0;
 }
 
-fn discrete_and_calculate_error(pixel: &mut RGB, color_map: &Vec<ColorMapElement>) -> f64 {
+fn discrete_and_calculate_error(pixel: &mut RGB, color_map: &[ColorMapElement]) -> f32 {
     let mut index_map = 0;
     let mut min_index = 0;
-    let mut min_diff = f64::MAX;
+    let mut min_diff = f32::MAX;
     while index_map < color_map.len() {
         let diff = (pixel.grayscale() - color_map[index_map].scale).abs();
         if diff < min_diff {
@@ -133,9 +126,10 @@ fn discrete_and_calculate_error(pixel: &mut RGB, color_map: &Vec<ColorMapElement
     }
 
     let last_element = color_map[min_index];
-    let error = pixel.grayscale() - last_element.scale ;
+    let error = pixel.grayscale() - last_element.scale;
     (*pixel) = last_element.color;
-    return error;
+
+    error
 }
 
 fn calculate_offset_matrix(matrix_dimenisons: [usize; 2], width: u32, origin: usize) -> Vec<isize> {
@@ -152,9 +146,8 @@ fn calculate_offset_matrix(matrix_dimenisons: [usize; 2], width: u32, origin: us
         index_i += 1;
     }
 
-    return offsets;
+    offsets
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -163,25 +156,29 @@ mod tests {
 
     #[test]
     fn test_calculate_offset_matrix() {
-
-        let error_diffusion_matrix = vec![0.20, -1.0, 0.15, 0.10, 0.10, 0.20, 0.20, 0.05];
-        let origin_index = error_diffusion_matrix.iter().position(|x| *x == -1.0).unwrap();
+        let error_diffusion_matrix = [0.20, -1.0, 0.15, 0.10, 0.10, 0.20, 0.20, 0.05];
+        let origin_index = error_diffusion_matrix
+            .iter()
+            .position(|x| *x == -1.0)
+            .unwrap();
 
         assert_eq!(origin_index, 1);
 
-        let matrix = calculate_offset_matrix([4,2], 300, origin_index);
+        let matrix = calculate_offset_matrix([4, 2], 300, origin_index);
         assert_eq!(matrix, vec![-1, 0, 1, 2, 299, 300, 301, 302]);
     }
 
     #[test]
     fn test_calculate_offset_matrix_2() {
-
-        let error_diffusion_matrix = vec![-1.0, 0.0, 0.15, 0.10, 0.10, 0.20, 0.20, 0.05];
-        let origin_index = error_diffusion_matrix.iter().position(|x| *x == -1.0).unwrap();
+        let error_diffusion_matrix = [-1.0, 0.0, 0.15, 0.10, 0.10, 0.20, 0.20, 0.05];
+        let origin_index = error_diffusion_matrix
+            .iter()
+            .position(|x| *x == -1.0)
+            .unwrap();
 
         assert_eq!(origin_index, 0);
 
-        let matrix = calculate_offset_matrix([4,2], 300, origin_index);
+        let matrix = calculate_offset_matrix([4, 2], 300, origin_index);
         assert_eq!(matrix, vec![0, 1, 2, 3, 300, 301, 302, 303]);
     }
 
@@ -189,14 +186,24 @@ mod tests {
     fn test_normalize_color_map() {
         let mut color_map: Vec<ColorMapElement> = vec![
             ColorMapElement {
-                color: RGB { r: 0.0, g: 0.0, b: 0.0, a: 1.00 },
+                color: RGB {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 1.00,
+                },
                 scale: 1.0,
-                offset: 0.0
+                offset: 0.0,
             },
-             ColorMapElement {
-                color: RGB { r: 1.0, g: 1.0, b: 1.0, a: 1.00 },
+            ColorMapElement {
+                color: RGB {
+                    r: 1.0,
+                    g: 1.0,
+                    b: 1.0,
+                    a: 1.00,
+                },
                 scale: 1.0,
-                offset: 0.0
+                offset: 0.0,
             },
         ];
 

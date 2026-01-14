@@ -1,10 +1,10 @@
-use crate::pixel_util::RGB;
+use crate::utils::pixel::RGB;
 
 #[derive(Debug, Clone, Copy)]
 pub struct ColorMapElement {
     pub color: RGB,
-    pub scale: f64, // only takes in consideration for error diffusion dithering
-    pub offset: f64,    // only takes in consideration for ordered dithering
+    pub scale: f32,  // only takes in consideration for error diffusion dithering
+    pub offset: f32, // only takes in consideration for ordered dithering
 }
 
 pub const DEFAULT_COLOR_MAP: [ColorMapElement; 2] = [

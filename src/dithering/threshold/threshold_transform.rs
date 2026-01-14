@@ -1,0 +1,470 @@
+use std::fmt::Display;
+
+use itertools::Itertools;
+
+use crate::{
+    color_palette,
+    dithering::threshold::multi_impl,
+    texture::{Shape, prelude::*},
+    transform::prelude::*,
+    utils::{self, simd::suggested_simd_width, transform::precompute_tiled_rows},
+};
+
+/// Configuration for threshold transforms, shared for all
+/// transform passes.
+#[derive(Debug, Clone)]
+pub struct ThresholdConfig {
+    /// bayer matrix data
+    pub(crate) matrix: Vec<f32>,
+    /// color map used for transform
+    pub(crate) map: Vec<color_palette::ColorMapElement>,
+    /// matrix order.
+    ///
+    /// > matrix M2 (2x2) is order 1.
+    /// > (alias for "first matrix")
+    /// >
+    /// > coincidently M4 (4x4) is order 2.
+    pub(crate) order: usize,
+    /// bits of side_size set to 1.
+    ///
+    /// > matrix side size == 2^order == sqrt(matrix.len()))
+    ///
+    /// Used for faster % computations on power of 2s.
+    ///
+    /// > x % 2^k === x & (2^k - 1)
+    ///
+    /// > equivalent to side_size - 1.
+    /// >
+    /// > this works because it's a power of 2.
+    pub(crate) side_mask: usize,
+}
+
+impl ThresholdConfig {
+    pub fn new(order: usize, matrix: Vec<f32>, map: Vec<color_palette::ColorMapElement>) -> Self {
+        // matrix side size (i.e. sqrt(matrix.len()))
+        let side_size = 1_usize << order;
+        assert!(
+            side_size * side_size == matrix.len(),
+            "matrix order does not match matrix buffer length"
+        );
+
+        let side_mask = side_size - 1;
+        Self {
+            order,
+            matrix,
+            map,
+            side_mask,
+        }
+    }
+
+    /// Pre-compute matrix complement as row patterns for the given image width.
+    fn cache_tiled_pattern(&mut self, width: usize) -> Vec<f32> {
+        precompute_tiled_rows(1 << self.order, width, |x, y, _| {
+            1.0 - self.matrix[self.matrix_idx(x, y)]
+        })
+    }
+
+    /// Get the 1D idx of the 2D matrix
+    #[inline(always)]
+    pub fn matrix_idx(&self, x: usize, y: usize) -> usize {
+        ((y & self.side_mask) << self.order) + (x & self.side_mask)
+    }
+
+    pub fn map_size(&self) -> usize {
+        self.map.len()
+    }
+}
+
+/// Strategy enum for selecting ThresholdTransform implementation
+#[derive(Debug, Clone, Copy)]
+pub enum ThresholdImpl {
+    /// Simple scalar implementation
+    Scalar,
+    /// SIMD with dynamic fitting (can handle any color_map size)
+    Simd { lanes: usize },
+    /// SIMD with fixed fitting requirements (requires color_map.len() == LANES)
+    SimdFixed { lanes: usize },
+}
+
+impl Display for ThresholdImpl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ThresholdImpl::Scalar => write!(f, "scalar"),
+            ThresholdImpl::Simd { lanes } => write!(f, "simd{}", lanes),
+            ThresholdImpl::SimdFixed { lanes } => write!(f, "simd-fixed{}", lanes),
+        }
+    }
+}
+
+impl ThresholdImpl {
+    /// Detect best-fit strategy
+    pub fn auto(config: &ThresholdConfig) -> Self {
+        // required width to process one thing
+        let size_hint: usize = config.map.len();
+        if size_hint < 2 {
+            return Self::Scalar;
+        }
+
+        let lane_hint = suggested_simd_width::<f32>();
+        if size_hint == lane_hint {
+            return Self::SimdFixed { lanes: lane_hint };
+        }
+
+        let lanes = ThresholdImpl::simd_fit(size_hint);
+        if lanes < 2 || lanes > 16 {
+            return Self::Scalar;
+        }
+        Self::Simd { lanes }
+    }
+
+    /// Create a transform instance for this strategy
+    ///
+    /// Returns `impl Transform<&mut Texture>` which is monomorphized at compile time
+    /// for optimal performance while hiding implementation details
+    pub fn build(
+        self,
+        config: ThresholdConfig,
+    ) -> impl TextureTransform<Input = f32, Output = utils::pixel::RGB> {
+        type I = ThresholdTransformImpl;
+        match self {
+            // scalar impls
+            Self::Scalar => I::Scalar(Scalar::new(config)),
+            // dynamic fitting impls
+            Self::Simd { lanes: 2 } => I::Simd2(SimdFit::<2>::new(config)),
+            Self::Simd { lanes: 4 } => I::Simd4(SimdFit::<4>::new(config)),
+            Self::Simd { lanes: 8 } => I::Simd8(SimdFit::<8>::new(config)),
+            Self::Simd { lanes: 16 } => I::Simd16(SimdFit::<16>::new(config)),
+            // fixed fitting impls
+            Self::SimdFixed { lanes: 2 } => I::SimdFixed2(SimdFixed::<2>::new(config)),
+            Self::SimdFixed { lanes: 4 } => I::SimdFixed4(SimdFixed::<4>::new(config)),
+            Self::SimdFixed { lanes: 8 } => I::SimdFixed8(SimdFixed::<8>::new(config)),
+            Self::SimdFixed { lanes: 16 } => I::SimdFixed16(SimdFixed::<16>::new(config)),
+            strategy => panic!("Unsupported lane configuration {:?}", strategy),
+        }
+    }
+
+    /// Compute the best-fit amount of lanes to use for
+    /// SIMD fit strategy.
+    pub fn simd_fit(lane_hint: usize) -> usize {
+        // minimize dummy data used for simd ops
+        let mut lanes = utils::num::closest_pow_2(lane_hint);
+        // ensure chosen_size fits in the suggested width
+        while lanes > lane_hint {
+            lanes >>= 1;
+        }
+        lanes
+    }
+
+    /// Name of the strategy. This hides away implementation details,
+    /// such as simd lanes used.
+    pub fn name(&self) -> &'static str {
+        match self {
+            ThresholdImpl::Scalar => "scalar",
+            ThresholdImpl::Simd { .. } => "simd",
+            ThresholdImpl::SimdFixed { .. } => "simd-fixed",
+        }
+    }
+}
+
+/// Internal enum that wraps all possible transform implementations.
+///
+/// This is returned as `impl Transform`, so the concrete type is hidden
+/// while still allowing full monomorphization.
+enum ThresholdTransformImpl {
+    Scalar(Scalar),
+    Simd2(SimdFit<2>),
+    Simd4(SimdFit<4>),
+    Simd8(SimdFit<8>),
+    Simd16(SimdFit<16>),
+    SimdFixed2(SimdFixed<2>),
+    SimdFixed4(SimdFixed<4>),
+    SimdFixed8(SimdFixed<8>),
+    SimdFixed16(SimdFixed<16>),
+}
+
+impl TextureTransform for ThresholdTransformImpl {
+    type Input = f32;
+    type Output = utils::pixel::RGB;
+
+    fn apply<'i, 'o>(
+        &mut self,
+        input: TextureSlice<'i, Self::Input>,
+        output: TextureMutSlice<'o, Self::Output>,
+    ) -> (
+        TextureSlice<'i, Self::Input>,
+        TextureMutSlice<'o, Self::Output>,
+    ) {
+        match self {
+            Self::Scalar(t) => t.apply(input, output),
+            Self::Simd2(t) => t.apply(input, output),
+            Self::Simd4(t) => t.apply(input, output),
+            Self::Simd8(t) => t.apply(input, output),
+            Self::Simd16(t) => t.apply(input, output),
+            Self::SimdFixed2(t) => t.apply(input, output),
+            Self::SimdFixed4(t) => t.apply(input, output),
+            Self::SimdFixed8(t) => t.apply(input, output),
+            Self::SimdFixed16(t) => t.apply(input, output),
+        }
+    }
+
+    fn prepare(&mut self, in_shape: Shape, out_shape: Shape) {
+        match self {
+            Self::Scalar(t) => t.prepare(in_shape, out_shape),
+            Self::Simd2(t) => t.prepare(in_shape, out_shape),
+            Self::Simd4(t) => t.prepare(in_shape, out_shape),
+            Self::Simd8(t) => t.prepare(in_shape, out_shape),
+            Self::Simd16(t) => t.prepare(in_shape, out_shape),
+            Self::SimdFixed2(t) => t.prepare(in_shape, out_shape),
+            Self::SimdFixed4(t) => t.prepare(in_shape, out_shape),
+            Self::SimdFixed8(t) => t.prepare(in_shape, out_shape),
+            Self::SimdFixed16(t) => t.prepare(in_shape, out_shape),
+        }
+    }
+}
+
+// Concrete Transform Implementations
+
+/// Simple non-vectorized
+struct Scalar {
+    config: ThresholdConfig,
+    tiled: Vec<f32>,
+}
+
+impl Scalar {
+    fn new(config: ThresholdConfig) -> Self {
+        Self {
+            config,
+            tiled: Vec::new(),
+        }
+    }
+}
+
+impl TextureTransform for Scalar {
+    type Input = f32;
+    type Output = utils::pixel::RGB;
+
+    fn apply<'i, 'o>(
+        &mut self,
+        input: TextureSlice<'i, Self::Input>,
+        mut output: TextureMutSlice<'o, Self::Output>,
+    ) -> (
+        TextureSlice<'i, Self::Input>,
+        TextureMutSlice<'o, Self::Output>,
+    ) {
+        multi_impl::scalar_par(
+            input.as_ref(),
+            input.shape_2d(),
+            output.as_mut(),
+            self.tiled.as_slice(),
+            &self.config,
+        );
+
+        (input, output)
+    }
+
+    fn prepare(&mut self, in_shape: Shape, out_shape: Shape) {
+        debug_assert_eq!(in_shape, out_shape);
+        self.tiled = self.config.cache_tiled_pattern(in_shape.0);
+    }
+}
+
+/// Constrained SIMD accelerated.
+///
+/// This method computes the threshold for one pixel against all colors in
+/// the color map.
+///
+/// It requires SIMD_LANES to have have the same size as color_map, so it is
+/// limited to power of 2s and practically ranges up to 32.
+struct SimdFixed<const SIMD_LANES: usize>
+where
+    std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
+{
+    config: ThresholdConfig,
+    tiled: Vec<f32>,
+    // Precomputed SIMD data
+    scale: std::simd::Simd<f32, SIMD_LANES>,
+    offset: std::simd::Simd<f32, SIMD_LANES>,
+}
+
+impl<const SIMD_LANES: usize> SimdFixed<SIMD_LANES>
+where
+    std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
+{
+    fn new(config: ThresholdConfig) -> Self {
+        assert_eq!(
+            config.map.len(),
+            SIMD_LANES,
+            "color map size must equal SIMD_LANES for fixed strategy"
+        );
+
+        let mut scale_array = [0.0f32; SIMD_LANES];
+        let mut offset_array = [0.0f32; SIMD_LANES];
+
+        for (i, color) in config.map.iter().enumerate() {
+            scale_array[i] = color.scale;
+            offset_array[i] = color.offset;
+        }
+
+        let scale = std::simd::Simd::<f32, SIMD_LANES>::from_array(scale_array);
+        let offset = std::simd::Simd::<f32, SIMD_LANES>::from_array(offset_array);
+
+        Self {
+            config,
+            scale,
+            offset,
+            tiled: Vec::new(),
+        }
+    }
+}
+
+impl<const SIMD_LANES: usize> TextureTransform for SimdFixed<SIMD_LANES>
+where
+    std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
+{
+    type Input = f32;
+    type Output = utils::pixel::RGB;
+
+    fn apply<'i, 'o>(
+        &mut self,
+        input: TextureSlice<'i, Self::Input>,
+        mut output: TextureMutSlice<'o, Self::Output>,
+    ) -> (
+        TextureSlice<'i, Self::Input>,
+        TextureMutSlice<'o, Self::Output>,
+    ) {
+        multi_impl::fixed_par(
+            input.as_ref(),
+            input.shape_2d(),
+            output.as_mut(),
+            &self.tiled,
+            &self.config,
+            self.scale,
+            self.offset,
+        );
+
+        (input, output)
+    }
+
+    fn prepare(&mut self, in_shape: Shape, out_shape: Shape) {
+        debug_assert_eq!(in_shape, out_shape);
+        self.tiled = self.config.cache_tiled_pattern(in_shape.0);
+    }
+}
+
+/// Flexible SIMD accelerated.
+///
+/// This method computes the threshold for one pixel against all colors in
+/// the color map iteratively, until finished.
+///
+/// If the color map is not a multiple of SIMD_LANES,
+/// remaining data is filled with dummy data.
+struct SimdFit<const SIMD_LANES: usize>
+where
+    std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
+{
+    config: ThresholdConfig,
+    tiled: Vec<f32>,
+    // Precomputed data for fitting arbitrary color map sizes
+    simd: Vec<SimdFitPassData<SIMD_LANES>>,
+    // iterations required per pixel to finish computing a pixel
+    compute_iters: usize,
+}
+
+/// Cached data for one pixel compute pass
+pub(crate) struct SimdFitPassData<const LANES: usize>
+where
+    std::simd::LaneCount<LANES>: std::simd::SupportedLaneCount,
+{
+    /// number of addresable items within the result.
+    pub(crate) size: usize,
+    pub(crate) scale: std::simd::Simd<f32, LANES>,
+    pub(crate) offset: std::simd::Simd<f32, LANES>,
+}
+
+impl<const SIMD_LANES: usize> SimdFit<SIMD_LANES>
+where
+    std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
+{
+    fn new(config: ThresholdConfig) -> Self {
+        // (color_map.len() + SIMD_LANES - 1) / SIMD_LANES
+        let compute_iters = config.map.len().div_ceil(SIMD_LANES);
+        // SAFETY: compute_data is immediately initialized
+        let mut compute_data: Vec<SimdFitPassData<SIMD_LANES>> = unsafe {
+            utils::buffer::uninitialized_buffer::<SimdFitPassData<SIMD_LANES>>(compute_iters)
+        };
+        for (iter, compute) in compute_data.iter_mut().enumerate() {
+            let range_size = if iter == compute_iters - 1 {
+                match config.map.len() % SIMD_LANES {
+                    0 => SIMD_LANES,
+                    remainder => remainder,
+                }
+            } else {
+                SIMD_LANES
+            };
+            let remainder = SIMD_LANES - range_size;
+
+            let range_start = iter * SIMD_LANES;
+            let range_end = range_start + range_size;
+            *compute = SimdFitPassData {
+                size: range_size,
+                scale: std::simd::Simd::<f32, SIMD_LANES>::from_slice(
+                    config.map[range_start..range_end]
+                        .iter()
+                        .map(|color| color.scale)
+                        .chain(std::iter::repeat_n(0.0, remainder))
+                        .collect_vec()
+                        .as_slice(),
+                ),
+                offset: std::simd::Simd::<f32, SIMD_LANES>::from_slice(
+                    config.map[range_start..range_end]
+                        .iter()
+                        .map(|color| color.offset)
+                        .chain(std::iter::repeat_n(0.0, remainder))
+                        .collect_vec()
+                        .as_slice(),
+                ),
+            }
+        }
+
+        Self {
+            config,
+            compute_iters,
+            simd: compute_data,
+            tiled: Vec::new(),
+        }
+    }
+}
+
+impl<const SIMD_LANES: usize> TextureTransform for SimdFit<SIMD_LANES>
+where
+    std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
+{
+    type Input = f32;
+    type Output = utils::pixel::RGB;
+
+    fn apply<'i, 'o>(
+        &mut self,
+        input: TextureSlice<'i, Self::Input>,
+        mut output: TextureMutSlice<'o, Self::Output>,
+    ) -> (
+        TextureSlice<'i, Self::Input>,
+        TextureMutSlice<'o, Self::Output>,
+    ) {
+        multi_impl::fit_par(
+            input.as_ref(),
+            input.shape_2d(),
+            output.as_mut(),
+            &self.tiled,
+            &self.config,
+            &self.simd,
+            self.compute_iters,
+        );
+
+        (input, output)
+    }
+
+    fn prepare(&mut self, in_shape: Shape, out_shape: Shape) {
+        debug_assert_eq!(in_shape, out_shape);
+        self.tiled = self.config.cache_tiled_pattern(in_shape.0);
+    }
+}

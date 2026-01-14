@@ -1,8 +1,10 @@
-use crate::pixel_util::RGB;
+use crate::{texture::Shape2D, utils::pixel::RGB};
 use image::{
-    metadata::Cicp, ConvertColorOptions, DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgba,
+    ConvertColorOptions, DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgba,
+    codecs::png::{CompressionType, FilterType, PngEncoder},
+    metadata::Cicp,
 };
-use std::fs::File;
+use std::{fs::File, path::Path};
 
 pub fn read_image(path: &String) -> Result<DynamicImage, Box<dyn std::error::Error>> {
     let mut image = ImageReader::open(path)?.decode()?;
@@ -31,7 +33,7 @@ pub fn dynimg_to_rgb(image: &DynamicImage) -> Vec<RGB> {
         .collect::<Vec<RGB>>()
 }
 
-pub fn rgb_to_dynimg(rgbs: &Vec<RGB>, width: u32, height: u32) -> DynamicImage {
+pub fn rgb_to_dynimg(rgbs: &[RGB], width: u32, height: u32) -> DynamicImage {
     let raw_data = rgbs
         .iter()
         .flat_map(|p| {
@@ -48,4 +50,27 @@ pub fn rgb_to_dynimg(rgbs: &Vec<RGB>, width: u32, height: u32) -> DynamicImage {
         ImageBuffer::<Rgba<u8>, Vec<u8>>::from_raw(width, height, raw_data)
             .expect("Could construct an image"),
     )
+}
+
+/// From a borrowed buffer construct an ImageBuffer
+/// and write to file using png encoder.
+pub(crate) fn write_png_buf<Pixel, T>(
+    buf: &[T],
+    shape: Shape2D,
+    path: &Path,
+    compression: CompressionType,
+    filtering: FilterType,
+) -> crate::error::Result
+where
+    Pixel: image::Pixel<Subpixel = T> + image::PixelWithColorType,
+    T: image::Primitive + image::Enlargeable,
+    [T]: image::EncodableLayout,
+{
+    let (width, height) = shape;
+    let image_buf = ImageBuffer::<Pixel, &[T]>::from_raw(width as u32, height as u32, buf)
+        .expect("image buffers don't match");
+    let file = &mut std::io::BufWriter::new(std::fs::File::create(path)?);
+    let encoder = PngEncoder::new_with_quality(file, compression, filtering);
+    image_buf.write_with_encoder(encoder)?;
+    Ok(())
 }
