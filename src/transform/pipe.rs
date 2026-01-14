@@ -41,6 +41,18 @@ pub trait PipeableTransform: TextureTransform + Sized {
     {
         Pipeline::with_buffer(self, next, intermediate)
     }
+
+    fn pipe_with_shape<T>(
+        self,
+        next: T,
+        shape: Shape,
+    ) -> Pipeline<Self::Input, Self::Output, T::Output, Self, T>
+    where
+        T: TextureTransform<Input = Self::Output>,
+        Self::Output: Default + Copy,
+    {
+        Pipeline::with_buffer(self, next, Texture::with_shape(shape))
+    }
 }
 
 // Blanket implementation: all TextureTransforms are automatically pipeable
@@ -167,5 +179,72 @@ impl<'i, 'o, A, B> PipeableTextures<'i, 'o> for (TextureSlice<'i, A>, TextureMut
         T: TextureTransform<Input = A, Output = B>,
     {
         transform.apply(self.0, self.1)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        prelude::{PipeableTransform, TextureTransform},
+        texture::{Shape, Texture},
+    };
+
+    #[test]
+    fn test_pipeline_cascades_apply() {
+        let shape: Shape = (4, 4, 1);
+        let input = Texture::<u8>::with_shape(shape);
+        let mut output = Texture::<u8>::with_shape(shape);
+
+        let a = IncTransform::default();
+        let b = IncTransform::default();
+
+        let mut pipeline = a.pipe_with_shape(b, shape);
+        pipeline.apply(input.as_texture_slice(), output.as_texture_mut_slice());
+
+        assert!(output.as_ref().iter().all(|p| *p == 2));
+    }
+
+    #[test]
+    fn test_pipeline_cascades_prepare() {
+        let mut pipeline =
+            IncTransform::default().pipe_with_shape(IncTransform::default(), (4, 4, 1));
+
+        pipeline.prepare((2, 2, 1), (8, 8, 1));
+
+        assert_eq!(pipeline.t1.in_shape, Some((2, 2, 1)));
+        assert_eq!(pipeline.t1.out_shape, Some((4, 4, 1)));
+        assert_eq!(pipeline.t2.in_shape, Some((4, 4, 1)));
+        assert_eq!(pipeline.t2.out_shape, Some((8, 8, 1)));
+    }
+
+    #[derive(Default)]
+    struct IncTransform {
+        in_shape: Option<Shape>,
+        out_shape: Option<Shape>,
+    }
+    impl TextureTransform for IncTransform {
+        type Input = u8;
+        type Output = u8;
+
+        fn apply<'i, 'o>(
+            &mut self,
+            input: crate::prelude::TextureSlice<'i, Self::Input>,
+            mut output: crate::prelude::TextureMutSlice<'o, Self::Output>,
+        ) -> (
+            crate::prelude::TextureSlice<'i, Self::Input>,
+            crate::prelude::TextureMutSlice<'o, Self::Output>,
+        ) {
+            output
+                .as_mut()
+                .iter_mut()
+                .zip(input.as_ref().iter())
+                .for_each(|(dst, src)| *dst = *src + 1);
+            (input, output)
+        }
+
+        fn prepare(&mut self, in_shape: crate::texture::Shape, out_shape: crate::texture::Shape) {
+            self.in_shape = Some(in_shape);
+            self.out_shape = Some(out_shape);
+        }
     }
 }

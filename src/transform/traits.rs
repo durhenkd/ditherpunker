@@ -1,7 +1,4 @@
-use crate::{
-    prelude::GrayscaleTransform,
-    texture::{Shape, Texture, TextureMutSlice, TextureRef, TextureSlice},
-};
+use crate::texture::{Shape, TextureMutSlice, TextureRef, TextureSlice};
 
 /// Core trait for applying a transform to data.
 ///

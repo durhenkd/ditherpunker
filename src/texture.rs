@@ -271,6 +271,10 @@ impl<T: Default + Copy> Texture<T> {
             planes,
         }
     }
+
+    pub fn with_shape(shape: Shape) -> Self {
+        Self::new(shape.0 as u32, shape.1 as u32, shape.2 as u32)
+    }
 }
 
 impl<T: Copy> Texture<T> {
