@@ -37,13 +37,21 @@ harness = false
 name = "iteration"
 harness = false
 
-# [profile.release]
-# lto = true
-# codegen-units = 1
-# opt-level = 3
+[[bench]]
+name = "grayscale_transform"
+harness = false
 
-# [profile.bench]
-# inherits = "release"
-# lto = true
-# codegen-units = 1
-# opt-level = 3
+[[bench]]
+name = "grayscale_transform_par"
+harness = false
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3
+
+[profile.bench]
+inherits = "release"
+lto = true
+codegen-units = 1
+opt-level = 3
