@@ -1,23 +1,25 @@
 use std::str::FromStr;
 
-use criterion::{BenchmarkGroup, BenchmarkId, measurement::WallTime};
 use ditherpunker::{
     color_palette::ColorMapElement,
-    dithering::threshold::{
-        threshold_transform::{ThresholdConfig, ThresholdImpl},
-        matrices,
-    },
-    texture::{Texture, TextureRef},
-    transform::prelude::*,
+    dithering::threshold::{matrices, threshold_transform::ThresholdConfig},
+    texture::Texture,
     utils::pixel::RGB,
 };
+use image::DynamicImage;
 use itertools::Itertools;
 use rand::Rng;
 
 pub const BENCH_IMAGE_SIZE: u32 = 300;
 
+pub fn read_test_image(size: u32) -> DynamicImage {
+    ditherpunker::utils::image::read_image(&"./assets/bench_asset.png".to_string())
+        .unwrap()
+        .resize(size, size, image::imageops::FilterType::Gaussian)
+}
+
 /// Default config for bayer transform benchmarks
-pub fn config(colors: usize) -> ThresholdConfig {
+pub fn threshold_config(colors: usize) -> ThresholdConfig {
     std::hint::black_box(ThresholdConfig::new(
         1,
         matrices::BAYER0.to_vec(),
@@ -26,39 +28,18 @@ pub fn config(colors: usize) -> ThresholdConfig {
 }
 
 /// Get owned data to perform bayer transformations
-pub fn data(size: u32) -> (Texture<f32>, Texture<ditherpunker::utils::pixel::RGB>) {
+pub fn threshold_data(size: u32) -> (Texture<f32>, Texture<ditherpunker::utils::pixel::RGB>) {
     (
         std::hint::black_box(
-            ditherpunker::utils::image::read_image(&"./assets/bench_asset.png".to_string())
-                .unwrap()
-                .resize(size, size, image::imageops::FilterType::Gaussian)
+            read_test_image(size)
                 .grayscale()
                 .brighten(60)
                 .adjust_contrast(10_f32)
                 .to_luma32f()
                 .into(),
         ),
-        std::hint::black_box(Texture::new(size, size)),
+        std::hint::black_box(Texture::new(size, size, 1)),
     )
-}
-
-/// Run bayer strategy under a criterion group
-pub fn benchmark_strategy(
-    group: &mut BenchmarkGroup<'_, WallTime>,
-    id: BenchmarkId,
-    config: ThresholdConfig,
-    strategy: ThresholdImpl,
-    size: u32,
-) {
-    let (input, mut output) = std::hint::black_box(data(size));
-    let mut transform = strategy.build(config);
-    transform.prepare(input.shape(), output.shape());
-
-    group.bench_with_input(id, &strategy, |b, _| {
-        b.iter(|| {
-            transform.apply(input.as_texture_slice(), output.as_texture_mut_slice());
-        });
-    });
 }
 
 pub fn rand_color(rng: &mut rand::rngs::ThreadRng) -> u8 {
@@ -72,6 +53,17 @@ pub fn rand_rgb(rng: &mut rand::rngs::ThreadRng) -> RGB {
         rand_color(rng),
         rand_color(rng),
     )
+}
+
+pub fn random_color_map(size: usize) -> Vec<ColorMapElement> {
+    let mut rng = rand::rng();
+    (0..size)
+        .map(|_| ColorMapElement {
+            color: rand_rgb(&mut rng),
+            offset: rng.random::<f32>(),
+            scale: rng.random::<f32>(),
+        })
+        .collect()
 }
 
 pub fn color_map_preset(colors: usize) -> Vec<ColorMapElement> {

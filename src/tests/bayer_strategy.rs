@@ -4,8 +4,8 @@ mod bayer_strategy_tests {
 
     use crate::{
         dithering::threshold::{
-            threshold_transform::{ThresholdConfig, ThresholdImpl},
             matrices,
+            threshold_transform::{ThresholdConfig, ThresholdImpl},
         },
         tests::utils::*,
         texture::{Texture, TextureRef},
@@ -21,8 +21,8 @@ mod bayer_strategy_tests {
         let rgb_data = gen_random_image(size);
         let grayscale: Vec<f32> = rgb_data.iter().map(|pixel| pixel.grayscale()).collect_vec();
 
-        let input = Texture::from_slice(size as u32, size as u32, &grayscale);
-        let output = Texture::new(size as u32, size as u32);
+        let input = Texture::from_slice(size as u32, size as u32, 1, &grayscale);
+        let output = Texture::new(size as u32, size as u32, 1);
 
         (input, output)
     }
@@ -74,7 +74,7 @@ mod bayer_strategy_tests {
             #[test]
             fn $test_name() {
                 let (input, mut output_a) = test_data(TEST_SIZE);
-                let mut output_b = Texture::new(TEST_SIZE as u32, TEST_SIZE as u32);
+                let mut output_b = Texture::new(TEST_SIZE as u32, TEST_SIZE as u32, 1);
 
                 let config = create_config($colors);
 

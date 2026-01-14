@@ -1,6 +1,9 @@
 use rand::Rng;
 
-use crate::{color_palette::ColorMapElement, utils::pixel::RGB};
+use crate::{
+    color_palette::{ColorMapElement, DEFAULT_COLOR_MAP},
+    utils::pixel::RGB,
+};
 
 pub const BENCH_IMAGE_SIZE: usize = 300;
 
@@ -23,7 +26,7 @@ pub fn gen_random_image(size: usize) -> Vec<RGB> {
 }
 
 pub fn default_color_map() -> Vec<ColorMapElement> {
-    Vec::from(crate::color_palette::DEFAULT_COLOR_MAP)
+    Vec::from(DEFAULT_COLOR_MAP)
 }
 
 pub fn random_color_map(size: usize) -> Vec<ColorMapElement> {

@@ -1,8 +1,5 @@
 #![allow(unused)]
 
-pub(crate) mod bench_utils;
-use bench_utils::*;
-
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use ditherpunker::utils::iterator::{GridIterator, ParGridIterator as ParGridIteratorMapInit};
 use rayon::prelude::*;

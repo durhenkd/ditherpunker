@@ -1,9 +1,13 @@
-use image::ImageBuffer;
-use std::path::Path;
+use image::{DynamicImage, ImageBuffer};
+use std::{ops::Deref, path::Path};
 
-use crate::utils::buffer::uninitialized_buffer;
+use crate::{
+    error::Result,
+    utils::{self, buffer::uninitialized_buffer},
+};
 
-pub type TextureShape = (usize, usize);
+pub type Shape2D = (usize, usize);
+pub type Shape = (usize, usize, usize);
 
 /// Trait defining ops available on Textures with
 /// lendable inner buffer
@@ -12,23 +16,94 @@ pub trait TextureRef: AsRef<[Self::Inner]> {
 
     fn width(&self) -> u32;
     fn height(&self) -> u32;
+    fn planes(&self) -> u32;
 
     #[inline]
-    fn shape(&self) -> TextureShape {
+    fn shape_2d(&self) -> Shape2D {
         (self.width() as usize, self.height() as usize)
+    }
+
+    #[inline]
+    fn shape(&self) -> Shape {
+        (
+            self.width() as usize,
+            self.height() as usize,
+            self.planes() as usize,
+        )
+    }
+
+    fn split_by_planes(self) -> Vec<Texture<Self::Inner>>
+    where
+        Self: Sized,
+        Self::Inner: Copy,
+    {
+        let planes = self.planes() as usize;
+        let mut textures = Vec::<Texture<Self::Inner>>::with_capacity(planes);
+        for plane in 0..planes {
+            // SAFETY: texture is immediately initialized via deinterleave write
+            let mut texture = unsafe {
+                Texture::<Self::Inner>::new_uninitialized(self.width(), self.height(), 1)
+            };
+            self.as_ref()
+                .iter()
+                .skip(plane)
+                .step_by(planes)
+                .zip(texture.as_mut().iter_mut())
+                .for_each(|(src, dst)| *dst = *src);
+            textures.push(texture);
+        }
+        textures
+    }
+
+    fn merge_planes(planes: Vec<Texture<Self::Inner>>) -> Texture<Self::Inner>
+    where
+        Self: Sized,
+        Self::Inner: Copy,
+    {
+        assert!(!planes.is_empty(), "Cannot merge empty plane vector");
+
+        let width = planes[0].width();
+        let height = planes[0].height();
+        let num_planes = planes.len() as u32;
+
+        // Verify all planes have the same dimensions
+        assert!(
+            planes
+                .iter()
+                .all(|p| p.width() == width && p.height() == height && p.planes() == 1),
+            "All planes must have the same dimensions and be single-plane textures"
+        );
+
+        // SAFETY: texture is immediately initialized via interleaved write
+        let mut merged =
+            unsafe { Texture::<Self::Inner>::new_uninitialized(width, height, num_planes) };
+
+        let dst = merged.as_mut();
+        for (plane_idx, plane) in planes.iter().enumerate() {
+            plane
+                .as_ref()
+                .iter()
+                .enumerate()
+                .for_each(|(pixel_idx, &value)| {
+                    let dst_idx = pixel_idx * planes.len() + plane_idx;
+                    dst[dst_idx] = value;
+                });
+        }
+
+        merged
     }
 }
 
-/// Trait defining ops available on mutable
-/// Textures
+/// Trait defining ops available on mutable Textures
 pub trait TextureMut: TextureRef + AsMut<[Self::Inner]> {}
 
 /// Texture with owned buffer.
 #[derive(Debug, Clone)]
 pub struct Texture<T> {
+    buffer: Vec<T>,
     width: u32,
     height: u32,
-    buffer: Vec<T>,
+    planes: u32,
 }
 
 impl<T> AsRef<[T]> for Texture<T> {
@@ -57,6 +132,11 @@ impl<T> TextureRef for Texture<T> {
     fn height(&self) -> u32 {
         self.height
     }
+
+    #[inline]
+    fn planes(&self) -> u32 {
+        self.planes
+    }
 }
 
 impl<T> TextureMut for Texture<T> {}
@@ -65,98 +145,123 @@ impl<T> Texture<T> {
     /// # Safety
     ///
     /// Make sure the texture is initialized before usage.
-    pub unsafe fn new_uninitialized(width: u32, height: u32) -> Self {
+    ///
+    /// > planes is assumed to be 1
+    pub unsafe fn new_uninitialized(width: u32, height: u32, planes: u32) -> Self {
         Self {
             width,
             height,
-            buffer: unsafe { uninitialized_buffer((width * height) as usize) },
+            buffer: unsafe { uninitialized_buffer((width * height * planes) as usize) },
+            planes: 1,
         }
     }
 
     pub fn as_texture_slice<'s>(&'s self) -> TextureSlice<'s, T> {
         TextureSlice {
+            buffer: &self.buffer,
             width: self.width,
             height: self.height,
-            buffer: &self.buffer,
+            planes: self.planes,
         }
     }
 
     pub fn as_texture_mut_slice<'s>(&'s mut self) -> TextureMutSlice<'s, T> {
         TextureMutSlice {
+            buffer: &mut self.buffer,
             width: self.width,
             height: self.height,
-            buffer: &mut self.buffer,
+            planes: self.planes,
         }
     }
 }
 
 impl<T: std::clone::Clone> Texture<T> {
-    pub fn from_slice(width: u32, height: u32, slice: &[T]) -> Self {
+    pub fn from_slice(width: u32, height: u32, planes: u32, slice: &[T]) -> Self {
         assert_eq!(
             slice.len(),
-            (width * height) as usize,
+            (width * height * planes) as usize,
             "buffers don't match sizes"
         );
         Texture {
+            buffer: slice.to_owned(),
             width,
             height,
-            buffer: slice.to_owned(),
+            planes,
         }
     }
 }
 
 impl<T: Default + Copy> Texture<T> {
-    pub fn new(width: u32, height: u32) -> Self {
+    pub fn new(width: u32, height: u32, planes: u32) -> Self {
         Self {
             width,
             height,
-            buffer: vec![T::default(); (width * height) as usize],
+            buffer: vec![T::default(); (width * height * planes) as usize],
+            planes,
         }
     }
 }
 
-impl<T: std::marker::Copy> Texture<T> {
+impl<T: Copy> Texture<T> {
     /// # Panics
-    /// This function will panic if the two slices have different lengths.
+    ///
+    /// This will panic if the two slices have different lengths.
     pub fn copy_from_slice(&mut self, slice: &[T]) {
         self.buffer.copy_from_slice(slice);
     }
-}
 
-impl Texture<f32> {
-    pub fn from_luma32f_image<P: AsRef<Path>>(path: P) -> crate::error::Result<Self> {
-        // pixel transformations from image crate assume linear RGB space
-        // color space coefficients follow a newer color spec:
-        // floats:      [0.2126, 0.7152, 0.0722]    image-0.25.9/src/images/buffer.rs:1577
-        // integral:    [2126, 7152, 722]           image-0.25.9/src/color.rs:602
-        let image = image::ImageReader::open(path)?.decode()?.to_luma32f();
+    /// Copy an image buffer into a new Texture
+    pub fn from_image_buffer<P, Container>(image_buffer: &image::ImageBuffer<P, Container>) -> Self
+    where
+        P: image::Pixel<Subpixel = T>,
+        Container: Deref<Target = [P::Subpixel]>,
+    {
+        let layout = image_buffer.sample_layout();
         // SAFETY: data is immediately copied over the uninitialized buffer
-        let mut texture = unsafe { Self::new_uninitialized(image.width(), image.height()) };
-        texture.copy_from_slice(image.into_flat_samples().as_slice());
-        Ok(texture)
+        let mut texture =
+            unsafe { Self::new_uninitialized(layout.width, layout.height, layout.channels as u32) };
+        texture.copy_from_slice(image_buffer.as_raw());
+        texture
+    }
+
+    fn from_image_impl<P, Container, ImageMap>(path: &Path, map: ImageMap) -> Result<Self>
+    where
+        P: image::Pixel<Subpixel = T>,
+        Container: Deref<Target = [P::Subpixel]>,
+        ImageMap: FnOnce(DynamicImage) -> ImageBuffer<P, Container>,
+    {
+        let image = image::ImageReader::open(path)?.decode()?;
+        let image = map(image);
+        Ok(Self::from_image_buffer(&image))
+    }
+
+    /// Read a DynamicImage, map to ImageBuffer and copy into a new Texture
+    ///
+    /// ## Example
+    ///
+    /// Read image as f32 luma:
+    ///
+    /// ```ignore
+    /// let texture =
+    ///    Texture::<f32>::from_image("path/to/image.png", |image| image.to_luma32f());
+    /// ```
+    pub fn from_image<P, Container, ImageMap>(path: impl AsRef<Path>, map: ImageMap) -> Result<Self>
+    where
+        P: image::Pixel<Subpixel = T>,
+        Container: Deref<Target = [P::Subpixel]>,
+        ImageMap: FnOnce(DynamicImage) -> ImageBuffer<P, Container>,
+    {
+        Self::from_image_impl(path.as_ref(), map)
     }
 }
 
-impl Texture<u8> {
-    pub fn from_luma8_image<P: AsRef<Path>>(path: P) -> crate::error::Result<Self> {
-        // pixel transformations from image crate assume linear RGB space
-        // color space coefficients follow a newer color spec:
-        // floats:      [0.2126, 0.7152, 0.0722]    image-0.25.9/src/images/buffer.rs:1577
-        // integral:    [2126, 7152, 722]           image-0.25.9/src/color.rs:602
-        let image = image::ImageReader::open(path)?.decode()?.to_luma8();
-        // SAFETY: data is immediately copied over the uninitialized buffer
-        let mut texture = unsafe { Self::new_uninitialized(image.width(), image.height()) };
-        texture.copy_from_slice(image.into_flat_samples().as_slice());
-        Ok(texture)
-    }
-}
-
-impl Texture<crate::utils::pixel::RGB> {
-    pub fn from_rgba8_image<P: AsRef<Path>>(path: P) -> crate::error::Result<Self> {
+impl Texture<utils::pixel::RGB> {
+    // TODO: maybe remove, not particularly useful
+    pub fn from_image_as_rgb<P: AsRef<Path>>(path: P) -> Result<Self> {
         let image = image::ImageReader::open(path)?.decode()?.to_rgba8();
-        let mut texture = unsafe { Self::new_uninitialized(image.width(), image.height()) };
+        let mut texture = unsafe { Self::new_uninitialized(image.width(), image.height(), 1) };
         image.pixels().enumerate().for_each(|(idx, pixel)| {
-            texture.buffer[idx] = crate::utils::pixel::RGB::from_u8_array(&pixel.0);
+            texture.buffer[idx] = utils::pixel::RGB::from_u8_array(&pixel.0);
         });
         Ok(texture)
     }
@@ -164,10 +269,12 @@ impl Texture<crate::utils::pixel::RGB> {
 
 impl<T: image::Primitive> From<ImageBuffer<image::Luma<T>, Vec<T>>> for Texture<T> {
     fn from(value: ImageBuffer<image::Luma<T>, Vec<T>>) -> Self {
+        let layout = value.sample_layout();
         Texture::from_slice(
-            value.width(),
-            value.height(),
-            value.into_flat_samples().as_slice(),
+            layout.width,
+            layout.height,
+            layout.channels as u32,
+            value.as_raw(),
         )
     }
 }
@@ -175,9 +282,10 @@ impl<T: image::Primitive> From<ImageBuffer<image::Luma<T>, Vec<T>>> for Texture<
 /// Texture with borrowed internal buffer
 #[derive(Debug, Copy, Clone)]
 pub struct TextureSlice<'a, T> {
+    buffer: &'a [T],
     width: u32,
     height: u32,
-    buffer: &'a [T],
+    planes: u32,
 }
 
 impl<T> AsRef<[T]> for TextureSlice<'_, T> {
@@ -197,23 +305,46 @@ impl<T> TextureRef for TextureSlice<'_, T> {
     fn height(&self) -> u32 {
         self.height
     }
+
+    fn planes(&self) -> u32 {
+        self.planes
+    }
 }
 
 impl<'a, T> TextureSlice<'a, T> {
-    pub fn new(width: u32, height: u32, buffer: &'a [T]) -> Self {
+    pub fn new(width: u32, height: u32, planes: u32, buffer: &'a [T]) -> Self {
         Self {
             width,
             height,
             buffer,
+            planes,
         }
+    }
+
+    /// Copy an image buffer into a new Texture
+    pub fn from_image_buffer<P, Container>(
+        image_buffer: &'a image::ImageBuffer<P, Container>,
+    ) -> Self
+    where
+        P: image::Pixel<Subpixel = T>,
+        Container: Deref<Target = [P::Subpixel]>,
+    {
+        let layout = image_buffer.sample_layout();
+        Self::new(
+            layout.width,
+            layout.height,
+            layout.channels as u32,
+            image_buffer.as_raw(),
+        )
     }
 }
 
 #[derive(Debug)]
 pub struct TextureMutSlice<'a, T> {
+    buffer: &'a mut [T],
     width: u32,
     height: u32,
-    buffer: &'a mut [T],
+    planes: u32,
 }
 
 impl<'a, T> AsRef<[T]> for TextureMutSlice<'a, T> {
@@ -240,16 +371,21 @@ impl<T> TextureRef for TextureMutSlice<'_, T> {
     fn height(&self) -> u32 {
         self.height
     }
+
+    fn planes(&self) -> u32 {
+        self.planes
+    }
 }
 
 impl<T> TextureMut for TextureMutSlice<'_, T> {}
 
 impl<'a, T> TextureMutSlice<'a, T> {
-    pub fn new(width: u32, height: u32, buffer: &'a mut [T]) -> Self {
+    pub fn new(width: u32, height: u32, planes: u32, buffer: &'a mut [T]) -> Self {
         Self {
+            buffer,
             width,
             height,
-            buffer,
+            planes,
         }
     }
 }

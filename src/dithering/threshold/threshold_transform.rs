@@ -5,7 +5,7 @@ use itertools::Itertools;
 use crate::{
     color_palette,
     dithering::threshold::multi_impl,
-    texture::prelude::*,
+    texture::{Shape, prelude::*},
     transform::prelude::*,
     utils::{self, transform::precompute_tiled_rows},
 };
@@ -220,11 +220,7 @@ impl TextureTransform for ThresholdTransformImpl {
         }
     }
 
-    fn prepare(
-        &mut self,
-        in_shape: crate::texture::TextureShape,
-        out_shape: crate::texture::TextureShape,
-    ) {
+    fn prepare(&mut self, in_shape: Shape, out_shape: Shape) {
         match self {
             Self::Scalar(t) => t.prepare(in_shape, out_shape),
             Self::Simd2(t) => t.prepare(in_shape, out_shape),
@@ -270,7 +266,7 @@ impl TextureTransform for Scalar {
     ) {
         multi_impl::scalar_par(
             input.as_ref(),
-            input.shape(),
+            input.shape_2d(),
             output.as_mut(),
             self.tiled.as_slice(),
             &self.config,
@@ -279,11 +275,7 @@ impl TextureTransform for Scalar {
         (input, output)
     }
 
-    fn prepare(
-        &mut self,
-        in_shape: crate::texture::TextureShape,
-        out_shape: crate::texture::TextureShape,
-    ) {
+    fn prepare(&mut self, in_shape: Shape, out_shape: Shape) {
         debug_assert_eq!(in_shape, out_shape);
         self.tiled = self.config.cache_tiled_pattern(in_shape.0);
     }
@@ -355,7 +347,7 @@ where
     ) {
         multi_impl::fixed_par(
             input.as_ref(),
-            input.shape(),
+            input.shape_2d(),
             output.as_mut(),
             &self.tiled,
             &self.config,
@@ -366,274 +358,11 @@ where
         (input, output)
     }
 
-    fn prepare(
-        &mut self,
-        in_shape: crate::texture::TextureShape,
-        out_shape: crate::texture::TextureShape,
-    ) {
+    fn prepare(&mut self, in_shape: Shape, out_shape: Shape) {
         debug_assert_eq!(in_shape, out_shape);
         self.tiled = self.config.cache_tiled_pattern(in_shape.0);
     }
 }
-
-// /// SIMD accelerated bayer dithering that processes multiple pixels simultaneously.
-// ///
-// /// Unlike SimdFixed which uses SIMD to compare one pixel against multiple thresholds,
-// /// this processes SIMD_LANES pixels at once, providing better memory bandwidth utilization.
-// ///
-// /// Requires color_map.len() to equal SIMD_LANES (same constraint as SimdFixed).
-// struct SimdPixelwise<const SIMD_LANES: usize>
-// where
-//     std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
-// {
-//     config: BayerConfig,
-//     /// Precomputed bayer matrix where each value is the complement
-//     /// of the original.
-//     bayer: Vec<f32>,
-//     /// Pre-computed bayer rows for cache-friendly sequential access.
-//     /// Each row contains the full-width bayer pattern for one y-coordinate.
-//     /// The outer vec has `bayer_side` entries (one per unique row pattern).
-//     bayer_rows: Vec<Vec<f32>>,
-//     /// Maximum width that was pre-computed. Used to detect when recomputation is needed.
-//     precomputed_width: usize,
-// }
-
-// impl<const SIMD_LANES: usize> SimdPixelwise<SIMD_LANES>
-// where
-//     std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
-// {
-//     fn new(config: BayerConfig) -> Self {
-//         assert_eq!(
-//             config.map.len(),
-//             SIMD_LANES,
-//             "color map size must equal SIMD_LANES for pixelwise strategy"
-//         );
-
-//         let bayer = config.cache_bayer_complement();
-
-//         Self {
-//             config,
-//             bayer,
-//             bayer_rows: Vec::new(),
-//             precomputed_width: 0,
-//         }
-//     }
-
-//     /// Pre-compute bayer row patterns for the given image width.
-//     /// This enables cache-friendly sequential SIMD loads instead of scattered index lookups.
-//     fn ensure_bayer_rows(&mut self, width: usize) {
-//         if width <= self.precomputed_width {
-//             return; // Already computed for this width or larger
-//         }
-
-//         let bayer_side = 1 << self.config.order;
-//         self.bayer_rows.clear();
-//         self.bayer_rows.reserve(bayer_side);
-
-//         for y in 0..bayer_side {
-//             let mut row = Vec::with_capacity(width);
-//             for x in 0..width {
-//                 row.push(self.bayer[self.config.bayer_idx(x, y)]);
-//             }
-//             self.bayer_rows.push(row);
-//         }
-
-//         self.precomputed_width = width;
-//     }
-// }
-
-// impl<'a, const SIMD_LANES: usize> Transform<BayerArgs<'a>> for SimdPixelwise<SIMD_LANES>
-// where
-//     std::simd::LaneCount<SIMD_LANES>: std::simd::SupportedLaneCount,
-// {
-//     fn apply(&mut self, rhs: &mut BayerArgs<'a>) {
-//         let width = rhs.input.width() as usize;
-//         let height = rhs.input.height() as usize;
-//         let input = rhs.input.as_ref();
-//         let output = rhs.output.as_mut();
-
-//         // Ensure bayer rows are pre-computed for this width
-//         self.ensure_bayer_rows(width);
-
-//         let fallback_color = self.config.map.last().unwrap().color;
-//         let bayer_side = 1 << self.config.order;
-
-//         for y in 0..height {
-//             let row_start = y * width;
-//             let row_end = row_start + width;
-
-//             // Select pre-computed bayer row (cycles every bayer_side rows)
-//             let bayer_row_idx = y & self.config.side_mask;
-//             let bayer_row = &self.bayer_rows[bayer_row_idx];
-
-//             // Try to get aligned SIMD chunks
-//             let (prefix, middle, suffix) = input[row_start..row_end].as_simd::<SIMD_LANES>();
-//             let mut pixel_idx = row_start;
-
-//             // Process prefix with scalar code
-//             for &pixel_value in prefix {
-//                 let x = pixel_idx - row_start;
-//                 let bayer = bayer_row[x];
-//                 let mut color = fallback_color;
-//                 for map in &self.config.map {
-//                     if pixel_value < bayer * map.scale + map.offset {
-//                         color = map.color;
-//                         break;
-//                     }
-//                 }
-//                 output[pixel_idx] = color;
-//                 pixel_idx += 1;
-//             }
-
-//             // Process middle SIMD chunks - this is where the performance gain happens
-//             for simd_pixels in middle {
-//                 let x_base = pixel_idx - row_start;
-
-//                 // Load bayer values sequentially - CACHE FRIENDLY!
-//                 let bayer_simd = std::simd::Simd::<f32, SIMD_LANES>::from_slice(
-//                     &bayer_row[x_base..x_base + SIMD_LANES],
-//                 );
-
-//                 // Initialize all pixels to fallback color
-//                 let mut colors = [fallback_color; SIMD_LANES];
-
-//                 // For each color threshold, check all SIMD_LANES pixels at once
-//                 for color_elem in &self.config.map {
-//                     let scale_simd = std::simd::Simd::<f32, SIMD_LANES>::splat(color_elem.scale);
-//                     let offset_simd = std::simd::Simd::<f32, SIMD_LANES>::splat(color_elem.offset);
-//                     let threshold = bayer_simd * scale_simd + offset_simd;
-//                     let mask = simd_pixels.simd_lt(threshold);
-
-//                     // Update colors where mask is true
-//                     let bitmask = mask.to_bitmask();
-//                     for lane in 0..SIMD_LANES {
-//                         if bitmask & (1 << lane) != 0 {
-//                             colors[lane] = color_elem.color;
-//                         }
-//                     }
-//                 }
-
-//                 // Write results
-//                 output[pixel_idx..pixel_idx + SIMD_LANES].copy_from_slice(&colors);
-//                 pixel_idx += SIMD_LANES;
-//             }
-
-//             // Process suffix with scalar code
-//             for &pixel_value in suffix {
-//                 let x = pixel_idx - row_start;
-//                 let bayer = bayer_row[x];
-//                 let mut color = fallback_color;
-//                 for map in &self.config.map {
-//                     if pixel_value < bayer * map.scale + map.offset {
-//                         color = map.color;
-//                         break;
-//                     }
-//                 }
-//                 output[pixel_idx] = color;
-//                 pixel_idx += 1;
-//             }
-//         }
-//     }
-// }
-
-// #[cfg(test)]
-// mod bayer_transform_internal_benches {
-//     use std::{hint::black_box, str::FromStr};
-
-//     use crate::{
-//         color_palette::ColorMapElement,
-//         dithering::threshold::{
-//             bayer_transform::{BayerArgs, BayerConfig, SimdFixed, SimdPixelwise},
-//             matrices,
-//         },
-//         texture::Texture,
-//         transform::prelude::*,
-//         utils::{image::read_image, pixel::RGB},
-//     };
-
-//     extern crate test;
-
-//     /// Get owned data to perform bayer transformations
-//     pub fn data(size: u32) -> (Texture<f32>, Texture<RGB>) {
-//         (
-//             std::hint::black_box(
-//                 read_image(&"./assets/bench_asset.png".to_string())
-//                     .unwrap()
-//                     .resize(size, size, image::imageops::FilterType::Gaussian)
-//                     .grayscale()
-//                     .brighten(60)
-//                     .adjust_contrast(10_f32)
-//                     .to_luma32f()
-//                     .into(),
-//             ),
-//             std::hint::black_box(Texture::new(size, size)),
-//         )
-//     }
-
-//     #[bench]
-//     fn bench_pixel_wise_strategy(b: &mut test::Bencher) {
-//         let cmap = |hex: &str, offset: f32, scale: f32| -> ColorMapElement {
-//             ColorMapElement {
-//                 color: RGB::from_hex(String::from_str(hex).unwrap()).unwrap(),
-//                 offset,
-//                 scale,
-//             }
-//         };
-
-//         let config = black_box(BayerConfig::new(
-//             1,
-//             black_box(matrices::BAYER0.to_vec()),
-//             black_box(vec![
-//                 cmap("#020217", 0.0, 0.8),
-//                 cmap("#2e2627", 0.05, 0.9),
-//                 cmap("#60594b", 0.1, 0.7),
-//                 cmap("#e6e2c2", 0.15, 0.85),
-//             ]),
-//         ));
-//         let (input, mut output) = data(300);
-//         let mut args = black_box(BayerArgs::new(
-//             input.as_ref_texture(),
-//             output.as_ref_mut_texture(),
-//         ));
-//         let mut transform = black_box(SimdPixelwise::<4>::new(config));
-
-//         b.iter(|| {
-//             transform.apply(&mut args);
-//         });
-//     }
-
-//     #[bench]
-//     fn bench_fixed_strategy(b: &mut test::Bencher) {
-//         let cmap = |hex: &str, offset: f32, scale: f32| -> ColorMapElement {
-//             ColorMapElement {
-//                 color: RGB::from_hex(String::from_str(hex).unwrap()).unwrap(),
-//                 offset,
-//                 scale,
-//             }
-//         };
-
-//         let config = black_box(BayerConfig::new(
-//             1,
-//             black_box(matrices::BAYER0.to_vec()),
-//             black_box(vec![
-//                 cmap("#020217", 0.0, 0.8),
-//                 cmap("#2e2627", 0.05, 0.9),
-//                 cmap("#60594b", 0.1, 0.7),
-//                 cmap("#e6e2c2", 0.15, 0.85),
-//             ]),
-//         ));
-//         let (input, mut output) = data(300);
-//         let mut args = black_box(BayerArgs::new(
-//             input.as_ref_texture(),
-//             output.as_ref_mut_texture(),
-//         ));
-//         let mut transform = black_box(SimdFixed::<4>::new(config));
-
-//         b.iter(|| {
-//             transform.apply(&mut args);
-//         });
-//     }
-// }
 
 /// Flexible SIMD accelerated.
 ///
@@ -736,7 +465,7 @@ where
     ) {
         multi_impl::fit_par(
             input.as_ref(),
-            input.shape(),
+            input.shape_2d(),
             output.as_mut(),
             &self.tiled,
             &self.config,
@@ -747,11 +476,7 @@ where
         (input, output)
     }
 
-    fn prepare(
-        &mut self,
-        in_shape: crate::texture::TextureShape,
-        out_shape: crate::texture::TextureShape,
-    ) {
+    fn prepare(&mut self, in_shape: Shape, out_shape: Shape) {
         debug_assert_eq!(in_shape, out_shape);
         self.tiled = self.config.cache_tiled_pattern(in_shape.0);
     }

@@ -35,8 +35,8 @@ impl ThresholdType {
             .flatten_iter()
             .collect();
 
-        let input = TextureSlice::new(width, height, grayscale.as_slice());
-        let output = TextureMutSlice::new(width, height, data);
+        let input = TextureSlice::new(width, height, 1, grayscale.as_slice());
+        let output = TextureMutSlice::new(width, height, 1, data);
 
         transform.apply(input, output);
     }
