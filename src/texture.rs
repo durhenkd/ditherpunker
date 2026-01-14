@@ -2,8 +2,8 @@ use image::{DynamicImage, ImageBuffer};
 use std::{ops::Deref, path::Path};
 
 use crate::{
-    error::Result,
-    utils::{self, buffer::uninitialized_buffer},
+    error::{DitherpunkerError, Result},
+    utils::{self, buffer::uninitialized_buffer, image::write_png_buf},
 };
 
 pub type Shape2D = (usize, usize);
@@ -91,6 +91,77 @@ pub trait TextureRef: AsRef<[Self::Inner]> {
         }
 
         merged
+    }
+
+    /// Interpret buffer as arbitrary pixel of Self::Inner and write it to png image.
+    fn write_png_with_pixel<Pixel>(
+        &self,
+        path: &Path,
+        compression: image::codecs::png::CompressionType,
+        filtering: image::codecs::png::FilterType,
+    ) -> Result
+    where
+        Pixel: image::Pixel<Subpixel = Self::Inner> + image::PixelWithColorType,
+        Self::Inner: image::Primitive + image::Enlargeable,
+        [Self::Inner]: image::EncodableLayout,
+    {
+        write_png_buf::<Pixel, Self::Inner>(
+            self.as_ref(),
+            self.shape_2d(),
+            path,
+            compression,
+            filtering,
+        )
+    }
+
+    /// Runtime dispather of write_png_with_pixel for appropiate pixel representations
+    /// depending on the number of planes.
+    ///
+    /// ```
+    /// 1 -> Luma
+    /// 2 -> LumaA
+    /// 3 -> Rgb
+    /// 4 -> Rgba
+    /// ```
+    ///
+    /// Traits constraints ensure only the subset implemented by image crate allow
+    /// this implementation. (i.e. Luma<f32> cannot be as image directly, while Rgb<f32> can).
+    fn write_png(
+        &self,
+        path: &Path,
+        compression: image::codecs::png::CompressionType,
+        filtering: image::codecs::png::FilterType,
+    ) -> Result
+    where
+        Self::Inner: image::Primitive + image::Enlargeable,
+        [Self::Inner]: image::EncodableLayout,
+        // per pixel type asserts
+        image::Luma<Self::Inner>: image::Pixel<Subpixel = Self::Inner> + image::PixelWithColorType,
+        image::LumaA<Self::Inner>: image::Pixel<Subpixel = Self::Inner> + image::PixelWithColorType,
+        image::Rgb<Self::Inner>: image::Pixel<Subpixel = Self::Inner> + image::PixelWithColorType,
+        image::Rgba<Self::Inner>: image::Pixel<Subpixel = Self::Inner> + image::PixelWithColorType,
+    {
+        match self.planes() {
+            1 => {
+                self.write_png_with_pixel::<image::Luma<Self::Inner>>(path, compression, filtering)
+            }
+            2 => {
+                self.write_png_with_pixel::<image::LumaA<Self::Inner>>(path, compression, filtering)
+            }
+            3 => self.write_png_with_pixel::<image::Rgb<Self::Inner>>(path, compression, filtering),
+            4 => {
+                self.write_png_with_pixel::<image::Rgba<Self::Inner>>(path, compression, filtering)
+            }
+            _ => Err(DitherpunkerError::ImageEncode(image::ImageError::Encoding(
+                image::error::EncodingError::new(
+                    image::error::ImageFormatHint::Exact(image::ImageFormat::Png),
+                    DitherpunkerError::String(format!(
+                        "unsupported plane count: {}",
+                        self.planes()
+                    )),
+                ),
+            ))),
+        }
     }
 }
 
@@ -389,34 +460,6 @@ impl<'a, T> TextureMutSlice<'a, T> {
         }
     }
 }
-
-// trait WriteLumaPng<P, T>: TextureOps<Inner = T>
-// where
-//     P: image::Pixel + image::PixelWithColorType,
-//     T: image::Primitive,
-//     // ImageBuffer::from_raw
-//     for<'a> &'a [T]: Deref<Target = [P::Subpixel]>,
-//     // write_with_encoder
-//     [<P as image::Pixel>::Subpixel]: image::EncodableLayout,
-// {
-//     fn write_luma_png(
-//         &self,
-//         path: impl AsRef<Path>,
-//         compression: CompressionType,
-//         filtering: FilterType,
-//     ) -> crate::error::Result {
-//         let image_buf =
-//             ImageBuffer::<P, &[T]>::from_raw(self.width(), self.height(), self.as_ref())
-//                 .expect("width and height do not match buffer size");
-//         let file = &mut std::io::BufWriter::new(std::fs::File::create(path)?);
-//         let encoder = PngEncoder::new_with_quality(file, compression, filtering);
-//         image_buf.write_with_encoder(encoder)?;
-//         Ok(())
-//     }
-// }
-
-// impl WriteLumaPng<image::Luma<u8>, u8> for TextureRef<'_, u8> {}
-// impl WriteLumaPng<image::Rgba<u8>, u8> for TextureRef<'_, u8> {}
 
 pub mod prelude {
     pub use super::{Texture, TextureMut, TextureMutSlice, TextureRef, TextureSlice};

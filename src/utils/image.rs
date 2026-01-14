@@ -1,7 +1,4 @@
-use crate::{
-    texture::{TextureRef, TextureSlice},
-    utils::pixel::RGB,
-};
+use crate::{texture::Shape2D, utils::pixel::RGB};
 use image::{
     ConvertColorOptions, DynamicImage, ImageBuffer, ImageFormat, ImageReader, Rgba,
     codecs::png::{CompressionType, FilterType, PngEncoder},
@@ -55,25 +52,23 @@ pub fn rgb_to_dynimg(rgbs: &[RGB], width: u32, height: u32) -> DynamicImage {
     )
 }
 
-/// From a TextureRef construct an ImageBuffer without copying
+/// From a borrowed buffer construct an ImageBuffer
 /// and write to file using png encoder.
-pub(crate) fn write_png_texture<Pixel, T>(
-    texture: TextureSlice<'_, T>,
+pub(crate) fn write_png_buf<Pixel, T>(
+    buf: &[T],
+    shape: Shape2D,
     path: &Path,
     compression: CompressionType,
     filtering: FilterType,
 ) -> crate::error::Result
 where
-    Pixel: image::Pixel + image::PixelWithColorType,
+    Pixel: image::Pixel<Subpixel = T> + image::PixelWithColorType,
     T: image::Primitive + image::Enlargeable,
-    // ImageBuffer::from_raw
-    for<'a> &'a [T]: std::ops::Deref<Target = [Pixel::Subpixel]>,
-    // write_with_encoder
-    [<Pixel as image::Pixel>::Subpixel]: image::EncodableLayout,
+    [T]: image::EncodableLayout,
 {
-    let image_buf =
-        ImageBuffer::<Pixel, &[T]>::from_raw(texture.width(), texture.height(), texture.as_ref())
-            .expect("image buffers don't match");
+    let (width, height) = shape;
+    let image_buf = ImageBuffer::<Pixel, &[T]>::from_raw(width as u32, height as u32, buf)
+        .expect("image buffers don't match");
     let file = &mut std::io::BufWriter::new(std::fs::File::create(path)?);
     let encoder = PngEncoder::new_with_quality(file, compression, filtering);
     image_buf.write_with_encoder(encoder)?;
