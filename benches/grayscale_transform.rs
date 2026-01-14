@@ -10,8 +10,8 @@ use ditherpunker::{
     prelude::{GrayscaleTransform, TextureTransform},
     texture::{Shape, Texture, TextureMutSlice, TextureRef, TextureSlice},
 };
+use ditherpunker_macros::simd_targets;
 use image::buffer::ConvertBuffer;
-use multiversion::multiversion;
 
 // compute grayscale using the image::ImageBuffer struct.
 // this creates new vec, so it's not suitable for repeated use
@@ -78,7 +78,7 @@ impl TextureTransform for SimpleScalarGraysale {
 }
 
 // targetted dispatcher of SimpleScalarGrayscale for ScalarTargetGraysale
-#[multiversion(targets("x86_64+avx512f", "x86_64+avx2", "x86_64+sse2"))]
+#[simd_targets]
 fn scalar_impl(in_buf: &[u8], out_buf: &mut [f32]) {
     in_buf.chunks_exact(3).enumerate().for_each(|(idx, pixel)| {
         out_buf[idx] = (pixel[0] as f32 + pixel[1] as f32 + pixel[2] as f32) / 3.0;
@@ -148,7 +148,7 @@ impl TextureTransform for ScalarUpperGrayscale {
 }
 
 // targetted dispatcher of SimpleUpperGrayscale for ScalarUpperTargetGrayscale
-#[multiversion(targets("x86_64+avx512f", "x86_64+avx2", "x86_64+sse2"))]
+#[simd_targets]
 fn upper_impl(in_buf: &[u8], out_buf: &mut [f32]) {
     in_buf.chunks_exact(3).enumerate().for_each(|(idx, pixel)| {
         let pix_value = (pixel[0] as u32 * SRGB_LUMA[0]

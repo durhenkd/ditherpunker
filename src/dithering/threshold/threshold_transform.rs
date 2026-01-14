@@ -7,7 +7,7 @@ use crate::{
     dithering::threshold::multi_impl,
     texture::{Shape, prelude::*},
     transform::prelude::*,
-    utils::{self, transform::precompute_tiled_rows},
+    utils::{self, simd::suggested_simd_width, transform::precompute_tiled_rows},
 };
 
 /// Configuration for threshold transforms, shared for all
@@ -105,20 +105,7 @@ impl ThresholdImpl {
             return Self::Scalar;
         }
 
-        // supported simd lanes
-        let mut lane_hint = multiversion::target_features::CURRENT_TARGET
-            .suggested_simd_width::<f32>()
-            .unwrap_or(0);
-
-        // add other targets in multi_impl and match against them here too
-        if is_x86_feature_detected!("avx512f") {
-            lane_hint = 16;
-        } else if is_x86_feature_detected!("avx2") {
-            lane_hint = 8;
-        } else if is_x86_feature_detected!("sse2") {
-            lane_hint = 4;
-        }
-
+        let lane_hint = suggested_simd_width::<f32>();
         if size_hint == lane_hint {
             return Self::SimdFixed { lanes: lane_hint };
         }

@@ -1,4 +1,4 @@
-use multiversion::multiversion;
+use ditherpunker_macros::simd_targets;
 use rayon::prelude::*;
 use std::simd::cmp::SimdPartialOrd;
 
@@ -10,7 +10,7 @@ use crate::{
 // Simd alias for f32 transform implementations
 type Simd<const SIMD_LANES: usize> = std::simd::Simd<f32, SIMD_LANES>;
 
-#[multiversion(targets("x86_64+avx512f", "x86_64+avx2", "x86_64+sse2"))]
+#[simd_targets]
 pub fn scalar_par(
     in_buf: &[f32],
     in_shape: (usize, usize),
@@ -46,7 +46,7 @@ pub fn scalar_par(
         });
 }
 
-#[multiversion(targets("x86_64+avx512f", "x86_64+avx2", "x86_64+sse2"))]
+#[simd_targets]
 pub fn fixed_par<const LANES: usize>(
     in_buf: &[f32],
     in_shape: (usize, usize),
@@ -91,7 +91,7 @@ pub fn fixed_par<const LANES: usize>(
         });
 }
 
-#[multiversion(targets("x86_64+avx512f", "x86_64+avx2", "x86_64+sse2"))]
+#[simd_targets]
 pub fn fit_par<const LANES: usize>(
     in_buf: &[f32],
     in_shape: (usize, usize),

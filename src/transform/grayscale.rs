@@ -1,4 +1,4 @@
-use multiversion::multiversion;
+use ditherpunker_macros::simd_targets;
 
 use crate::{
     prelude::TextureTransform,
@@ -104,7 +104,7 @@ impl TextureTransform for GrayscalePar {
 
 const SRGB_LUMA_F32: [f32; 3] = [0.2126, 0.7152, 0.0722];
 
-#[multiversion(targets("x86_64+avx512f", "x86_64+avx2", "x86_64+sse2"))]
+#[simd_targets]
 fn scalar_impl(in_buf: &[u8], out_buf: &mut [f32], planes: usize) {
     debug_assert!(planes == 3 || planes == 4);
     in_buf
@@ -119,7 +119,7 @@ fn scalar_impl(in_buf: &[u8], out_buf: &mut [f32], planes: usize) {
         });
 }
 
-#[multiversion(targets("x86_64+avx512f", "x86_64+avx2", "x86_64+sse2"))]
+#[simd_targets]
 fn scalar_par_impl(in_buf: &[u8], out_buf: &mut [f32], shape: Shape) {
     use rayon::prelude::*;
 

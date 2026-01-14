@@ -10,12 +10,12 @@ use ditherpunker::{
     prelude::{GrayscaleTransform, TextureTransform},
     texture::{Shape, Shape2D, Texture, TextureMutSlice, TextureRef, TextureSlice},
 };
-use multiversion::multiversion;
+use ditherpunker_macros::simd_targets;
 use rayon::prelude::*;
 
 const SRGB_LUMA_F32: [f32; 3] = [0.2126, 0.7152, 0.0722];
 
-#[multiversion(targets("x86_64+avx512f", "x86_64+avx2", "x86_64+sse2"))]
+#[simd_targets]
 fn scalar_impl(in_buf: &[u8], out_buf: &mut [f32]) {
     in_buf.chunks_exact(3).enumerate().for_each(|(idx, pixel)| {
         let pix_value = (pixel[0] as f32 * SRGB_LUMA_F32[0]
@@ -26,7 +26,7 @@ fn scalar_impl(in_buf: &[u8], out_buf: &mut [f32]) {
     });
 }
 
-#[multiversion(targets("x86_64+avx512f", "x86_64+avx2", "x86_64+sse2"))]
+#[simd_targets]
 fn scalar_par_impl(in_buf: &[u8], out_buf: &mut [f32], shape: Shape2D) {
     let (width, _) = shape;
     out_buf
