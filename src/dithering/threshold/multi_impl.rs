@@ -21,7 +21,7 @@ pub fn scalar_par(
     let (width, _) = in_shape;
     let fallback_color = config.map.last().unwrap().color;
     out_buf
-        .par_chunks_mut(width)
+        .par_chunks_exact_mut(width)
         .enumerate()
         .for_each(|(y, row)| {
             let tiled_row_idx = y & config.side_mask;
@@ -61,7 +61,7 @@ pub fn fixed_par<const LANES: usize>(
     let (width, _) = in_shape;
     let fallback_color = config.map.last().unwrap().color;
     out_buf
-        .par_chunks_mut(width)
+        .par_chunks_exact_mut(width)
         .enumerate()
         .for_each(|(y, row)| {
             let tiled_row_idx = y & config.side_mask;
@@ -107,7 +107,7 @@ pub fn fit_par<const LANES: usize>(
     let (width, _) = in_shape;
     let fallback_color = config.map.last().unwrap().color;
     out_buf
-        .par_chunks_mut(width)
+        .par_chunks_exact_mut(width)
         .enumerate()
         .for_each(|(y, row)| {
             let tiled_row_idx = y & config.side_mask;
